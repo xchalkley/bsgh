@@ -511,9 +511,16 @@
       if(Array.isArray(beatmapJson.bombNotes)) rawBombs = beatmapJson.bombNotes;
       else if(Array.isArray(beatmapJson._bombNotes)) rawBombs = beatmapJson._bombNotes;
 
-      // Walls / obstacles
-      const rawObstaclesV2 = Array.isArray(beatmapJson._obstacles) ? beatmapJson._obstacles : (Array.isArray(beatmapJson.obstacles) ? beatmapJson.obstacles : null);
-      const rawObstaclesV3 = Array.isArray(beatmapJson.obstacles) ? beatmapJson.obstacles : (Array.isArray(beatmapJson._obstacles) ? beatmapJson._obstacles : null);
+      // Walls / obstacles (split v2 vs v3 to avoid double-processing)
+      const rawObstacles = Array.isArray(beatmapJson.obstacles)
+        ? beatmapJson.obstacles
+        : (Array.isArray(beatmapJson._obstacles) ? beatmapJson._obstacles : null);
+      const rawObstaclesV2 = Array.isArray(rawObstacles)
+        ? rawObstacles.filter(o => o && (('_time' in o) || ('_lineIndex' in o) || ('_duration' in o)))
+        : null;
+      const rawObstaclesV3 = Array.isArray(rawObstacles)
+        ? rawObstacles.filter(o => o && ('b' in o) && ('x' in o) && ('d' in o))
+        : null;
 
       const offset = toFiniteNumber(songTimeOffsetSec) || 0;
       const NOTE_DEDUP = 0.002;
@@ -541,9 +548,9 @@
         }
 
         // v2-like
-        const beat = toFiniteNumber((n && n._time) || (n && n.time));
-        const laneRaw = (n && n._lineIndex) || (n && n.lineIndex);
-        const type = (n && n._type) || (n && n.type);
+        const beat = toFiniteNumber((n && n._time) ?? (n && n.time));
+        const laneRaw = (n && (n._lineIndex ?? n.lineIndex));
+        const type = (n && (n._type ?? n.type));
         if(type === 3){
           // bomb in v2
           const laneB = clampInt(laneRaw, 0, 3);
@@ -569,8 +576,8 @@
       // v3 bombs
       if(Array.isArray(rawBombs)){
         for(const b of rawBombs){
-          const beat = toFiniteNumber((b && b.b) || (b && b._time) || (b && b.time));
-          const lane = clampInt((b && b.x) || (b && b._lineIndex) || (b && b.lineIndex), 0, 3);
+          const beat = toFiniteNumber((b && b.b) ?? (b && b._time) ?? (b && b.time));
+          const lane = clampInt((b && (b.x ?? b._lineIndex ?? b.lineIndex)), 0, 3);
           if(lane === null || !Number.isFinite(beat)) continue;
           const t = beatToSec(beat) + offset;
           if(!Number.isFinite(t)) continue;
@@ -592,12 +599,12 @@
       if(Array.isArray(rawObstaclesV2)){
         for(const o of rawObstaclesV2){
           if(o && (('_time' in o) || ('_lineIndex' in o) || ('_duration' in o))){
-            const type = toFiniteNumber((o && o._type) || (o && o.type));
+            const type = toFiniteNumber((o && (o._type ?? o.type)));
             if(type === 1) continue; // duck walls excluded
-            const beat = toFiniteNumber((o && o._time) || (o && o.time));
-            const lane = clampInt((o && o._lineIndex) || (o && o.lineIndex), 0, 3);
-            const width = clampInt((o && o._width) || (o && o.width) || 1, 1, 4);
-            const durBeat = toFiniteNumber((o && o._duration) || (o && o.duration));
+            const beat = toFiniteNumber((o && (o._time ?? o.time)));
+            const lane = clampInt((o && (o._lineIndex ?? o.lineIndex)), 0, 3);
+            const width = clampInt((o && (o._width ?? o.width)) ?? 1, 1, 4);
+            const durBeat = toFiniteNumber((o && (o._duration ?? o.duration)));
             if(lane === null || !Number.isFinite(beat) || !Number.isFinite(durBeat)) continue;
 
             const durSec = durationBeatToSec(beat, durBeat);
@@ -619,9 +626,9 @@
           if(!o || !('b' in o) || !('x' in o) || !('d' in o)) continue;
           const beat = toFiniteNumber(o.b);
           const lane = clampInt(o.x, 0, 3);
-          const y = toFiniteNumber(o.y || 0);
+          const y = toFiniteNumber(o.y ?? 0);
           if(y === 2) continue; // duck walls excluded
-          const width = clampInt(o.w || 1, 1, 4);
+          const width = clampInt((o.w ?? 1), 1, 4);
           const durBeat = toFiniteNumber(o.d);
           if(lane === null || !Number.isFinite(beat) || !Number.isFinite(durBeat)) continue;
 
@@ -2664,6 +2671,13 @@
       assert(chart.bombs[0].lane===1, 'bomb lane');
     });
 
+    test('parseBeatmapTo4Lane keeps v2 lane 0 notes', ()=>{
+      const beatmap={ _notes:[{_time:1,_lineIndex:0,_type:0}] };
+      const chart=parseBeatmapTo4Lane(beatmap, 120, 0);
+      assert(chart.notes.length===1, 'should keep lane 0 note');
+      assert(chart.notes[0].lane===0, 'lane 0 preserved');
+    });
+
     test('parseBeatmapTo4Lane collects v3 bombs', ()=>{
       const beatmap={ colorNotes:[{b:1,x:0}], bombNotes:[{b:1,x:0},{b:2,x:3}] };
       const chart=parseBeatmapTo4Lane(beatmap, 120, 0);
@@ -2695,6 +2709,17 @@
       const chart=parseBeatmapTo4Lane(beatmap, 120, 0);
       assert(chart.walls.length===1, 'should have 1 wall');
       assert(chart.walls[0].lane===1, 'wall lane');
+    });
+
+    test('parseBeatmapTo4Lane does not double-count v3 obstacles array', ()=>{
+      const beatmap={
+        colorNotes:[{b:1,x:0}],
+        obstacles:[
+          {b:1,x:0,y:0,d:1,w:1,h:5},
+        ]
+      };
+      const chart=parseBeatmapTo4Lane(beatmap, 120, 0);
+      assert(chart.walls.length===1, 'should not duplicate v3 walls');
     });
 
     test('wall chroma color is applied when present', ()=>{
