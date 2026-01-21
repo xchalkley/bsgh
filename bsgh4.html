@@ -1,0 +1,2873 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Beat Saber Guitar Hero</title>
+  <style>
+    :root {
+      --bg1: #000000;
+      --bg2: #000000;
+      --accent: #4ab2ff; /* default purple -> blue */
+      --text: #e7e9ff;
+      --muted: #93a1b5;
+      --bad: #ff6b6b;
+    }
+    html, body {
+      background: #000; /* completely dark */
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .wrap { height: 100%; display: grid; grid-template-rows: auto 1fr auto; }
+    header {
+      padding: 10px 16px; display: flex; align-items: center; gap: 16px;
+      backdrop-filter: blur(8px); background: rgba(0, 0, 0, 0.65);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    header h1 { font-size: 16px; font-weight: 600; letter-spacing: .4px; margin: 0; color: var(--accent); }
+    header .hud { display: flex; gap: 10px; margin-left: auto; font-variant-numeric: tabular-nums; align-items: center; }
+    header .pill {
+      padding: 7px 12px;
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 999px;
+      color: var(--muted);
+      background: rgba(0,0,0,0.55);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+      white-space: nowrap;
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    #game { width: 100vw; height: calc(100vh - 120px); display: block; touch-action: none; }
+
+    footer {
+      padding: 10px 16px; display: flex; gap: 8px; align-items: center;
+      background: rgba(0, 0, 0, 0.65);
+      border-top: 1px solid rgba(255,255,255,0.08);
+    }
+    footer button, footer .range, .btn {
+      font: inherit; color: var(--text);
+      background: rgba(0,0,0,0.55);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 10px; padding: 10px 14px; cursor: pointer;
+    }
+    footer button:hover, .btn:hover { filter: brightness(1.08); }
+    footer button:active, .btn:active { filter: brightness(0.95); }
+    footer .range { display: flex; align-items: center; gap: 10px; padding: 8px 12px; }
+    footer input[type="range"] { width: min(42vw, 380px); }
+
+    .kbd { display: inline-grid; place-items: center; min-width: 22px; padding: 2px 6px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.14); background: rgba(0,0,0,0.55); font-size: 12px; color: #b6c1d6; }
+
+    .overlay { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,0.84); z-index: 50; }
+    .panel {
+      width: min(760px, 92vw); background: rgba(0,0,0,0.78);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 16px; padding: 18px; box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+    }
+    .panel h2 { margin: 0 0 8px 0; font-size: 18px; color: var(--accent); }
+    .card { background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.10); border-radius: 14px; padding: 14px; }
+    .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .stack { display:flex; flex-direction:column; gap:8px; }
+    .muted { color: var(--muted); font-size: 12px; }
+
+    .stats .card { text-align:center; }
+    .statValue { font-size: 24px; font-weight: 700; color: var(--text); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="songHead" style="display:flex;align-items:center;gap:12px;min-width:0;">
+        <img id="songCover" alt="" style="width:40px;height:40px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);background:#000;object-fit:cover;display:none" />
+        <div class="stack" style="gap:2px;min-width:0;">
+          <h1 id="songTitle" style="font-size:16px;font-weight:600;letter-spacing:.4px;margin:0;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Canvas Guitar Hero — Beat Saber (ZIP Loader)</h1>
+          <div id="songComposer" class="muted" style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:none"></div>
+        </div>
+      </div>
+      <div class="hud" aria-live="polite">
+        <div class="pill"><span>Score:</span> <span id="scoreVal">0</span></div>
+        <div class="pill"><span>Streak:</span> <span id="streakVal">0</span></div>
+        <div class="pill"><span>Accuracy:</span> <span id="accVal">100%</span></div>
+        <div class="pill"><span>Time:</span> <span id="timeVal">0.0s</span></div>
+      </div>
+    </header>
+
+    <canvas id="game" aria-label="Guitar game canvas" role="img"></canvas>
+
+    <footer>
+      <button id="loadBtn" title="Load Beat Saber ZIP">Load ZIP</button>
+      <button id="startBtn" title="Start (Space)">Start</button>
+      <button id="pauseBtn" title="Pause/Resume (P)">Pause</button>
+      <button id="restartBtn" title="Restart (R)">Restart</button>
+      <div class="range" title="Scroll speed (derived from NJS)">
+        <span class="muted" style="color:var(--muted)">Scroll</span>
+        <span id="speedReadout" style="font-variant-numeric: tabular-nums;">360 px/s</span>
+      </div>
+      <div class="range" title="Music volume">
+        Music Vol <input id="musicVol" type="range" min="0" max="1" step="0.01" value="0.7">
+        <span id="musicVolVal">70%</span>
+      </div>
+      <div style="margin-left:auto;color:#9fb0c6;">
+        Play with <span class="kbd">D</span> <span class="kbd">F</span> <span class="kbd">J</span> <span class="kbd">K</span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Load Overlay -->
+  <div class="overlay" id="overlay" style="display:grid">
+    <div class="panel">
+      <h2>Load a Beat Saber level ZIP</h2>
+      <p class="muted">Pick a downloaded Beat Saber map <strong>.zip</strong>. This loader reads <strong>Info.dat</strong>, lets you choose a Standard difficulty, parses notes into 4 lanes, plays the song audio, and renders a light show (red/purple swapped, off=black) from <strong>_events</strong> / <strong>basicBeatmapEvents</strong>, including Chroma per-event colors. Bombs render as spiky black pills. Walls render as red boxes (Chroma obstacle colors supported), excluding duck walls.</p>
+
+      <div class="card">
+        <div class="row" style="justify-content:space-between;">
+          <div class="stack">
+            <div class="muted" id="zipMeta">No file selected</div>
+            <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap;">
+              <span class="muted" style="min-width:84px;">Difficulty</span>
+              <select id="diffSelect" disabled style="min-width:220px; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.12); background: rgba(0,0,0,0.55); color:var(--text);">
+                <option value="">(choose a zip first)</option>
+              </select>
+              <span class="muted" id="diffMeta" style="opacity:0.9"></span>
+            </div>
+            <div class="muted" id="errorText" style="color:var(--bad); display:none"></div>
+          </div>
+          <div class="row">
+            <button class="btn" id="chooseZip">Choose ZIP</button>
+            <button class="btn" id="loadZip" disabled>Load</button>
+          </div>
+        </div>
+        <input id="zipFile" type="file" accept=".zip" style="display:none" />
+      </div>
+    </div>
+  </div>
+
+  <!-- Win overlay -->
+  <div class="overlay" id="win" style="display:none">
+    <div class="panel">
+      <h2>Song Complete! 🎉</h2>
+      <div class="row stats" style="display:grid; grid-template-columns: repeat(4, 1fr); gap:14px;">
+        <div class="card stack"><span class="muted">Score</span><div class="statValue" id="winScore">0</div></div>
+        <div class="card stack"><span class="muted">Accuracy</span><div class="statValue" id="winAcc">100%</div></div>
+        <div class="card stack"><span class="muted">Max Streak</span><div class="statValue" id="winStreak">0</div></div>
+        <div class="card stack"><span class="muted">Notes Hit</span><div class="statValue" id="winHits">0/0</div></div>
+      </div>
+      <div class="row" style="margin-top:12px; justify-content:flex-end">
+        <button class="btn" id="playAgain">Play Again</button>
+        <button class="btn" id="chooseFiles">Choose Different ZIP</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- JSZip for reading Beat Saber ZIPs -->
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+
+  <script type="module">
+    // =========================
+    // Tiny test harness (runs once; logs to console)
+    // =========================
+    function test(name, fn){
+      try{ fn(); console.log('%cPASS', 'color:#25d34f', name); }
+      catch(e){ console.error('FAIL', name, e); }
+    }
+    function assert(cond, msg='Assertion failed'){ if(!cond) throw new Error(msg); }
+
+    // =========================
+    // Small numeric helpers
+    // =========================
+    function toFiniteNumber(v){
+      const n = (typeof v === 'string' && v.trim() === '') ? NaN : Number(v);
+      return Number.isFinite(n) ? n : NaN;
+    }
+
+    // =========================
+    // Helpers (paths / ZIP)
+    // =========================
+    const BACKSLASH = String.fromCharCode(92);
+    const normPath = (p)=> String(p || '').split(BACKSLASH).join('/');
+
+    function findFileCaseInsensitive(zip, candidates){
+      const files = zip.files;
+      const keys = Object.keys(files);
+      const map = new Map();
+      const baseMap = new Map();
+      for(const k0 of keys){
+        const k = normPath(k0);
+        const low = k.toLowerCase();
+        map.set(low, k0);
+        const base = low.split('/').pop();
+        if(!baseMap.has(base)) baseMap.set(base, k0);
+      }
+      for(const c of candidates){
+        const low = String(c).toLowerCase();
+        const hitKey = map.get(low) || baseMap.get(low);
+        if(hitKey) return zip.file(hitKey);
+      }
+      return null;
+    }
+
+    // Chroma-style per-object color helper (supports 0..1 or 0..255 RGBA arrays)
+    function parseChromaColorFromCustomData(customData){
+      const cd = (customData && typeof customData === 'object') ? customData : null;
+      if(!cd) return null;
+
+      const solid = cd._color || cd.color || cd._obstacleColor || cd.obstacleColor || cd._lightColor || cd.lightColor || null;
+      const grad = cd._lightGradient || cd.lightGradient || null;
+      const start = (grad && grad._startColor) || (grad && grad.startColor) || null;
+      const end = (grad && grad._endColor) || (grad && grad.endColor) || null;
+
+      const arr = Array.isArray(solid) ? solid : (Array.isArray(start) ? start : (Array.isArray(end) ? end : null));
+      if(!Array.isArray(arr) || arr.length < 3) return null;
+
+      let r=toFiniteNumber(arr[0]), g=toFiniteNumber(arr[1]), b=toFiniteNumber(arr[2]);
+      let a=arr.length>3 ? toFiniteNumber(arr[3]) : NaN;
+      if(!Number.isFinite(r) || !Number.isFinite(g) || !Number.isFinite(b)) return null;
+
+      const clamp01Local = (x)=> Math.max(0, Math.min(1, Number(x)||0));
+      const max = Math.max(Math.abs(r), Math.abs(g), Math.abs(b), Number.isFinite(a) ? Math.abs(a) : 0);
+      const scale = (max > 1.5) ? (1/255) : 1;
+      r = clamp01Local(r * scale);
+      g = clamp01Local(g * scale);
+      b = clamp01Local(b * scale);
+      const alpha = Number.isFinite(a) ? clamp01Local(a * scale) : 1;
+
+      const toHex2 = (v)=> Math.round(v*255).toString(16).padStart(2,'0');
+      const hex = '#'+toHex2(r)+toHex2(g)+toHex2(b);
+      return { hex, alpha };
+    }
+
+    // =========================
+    // Beat Saber Info + Beatmap parsing
+    // =========================
+    function pickStandardDifficulties(info){
+      const sets = info._difficultyBeatmapSets || info.difficultyBeatmapSets;
+      if(!Array.isArray(sets)) return [];
+      const std = sets.find(s => (s._beatmapCharacteristicName || s.beatmapCharacteristicName) === 'Standard') || sets[0];
+      if(!std) return [];
+      const diffs = std._difficultyBeatmaps || std.difficultyBeatmaps;
+      if(!Array.isArray(diffs)) return [];
+      return diffs.map(d => ({
+        name: d._difficulty || d.difficulty || 'Unknown',
+        rank: d._difficultyRank || d.difficultyRank || 0,
+        file: d._beatmapFilename || d.beatmapFilename,
+        njs: d._noteJumpMovementSpeed || d.noteJumpMovementSpeed || d._noteJumpSpeed || d.noteJumpSpeed || null,
+      }))
+      .filter(d => !!d.file)
+      .sort((a,b) => (a.rank-b.rank) || String(a.name).localeCompare(String(b.name)));
+    }
+
+    function chooseDifficultyByName(diffs, name){
+      if(!diffs.length) return null;
+      if(!name) return diffs[diffs.length-1];
+      const low = String(name).toLowerCase();
+      return diffs.find(d => String(d.name).toLowerCase() === low) || diffs[diffs.length-1];
+    }
+
+    function readNJSForDifficulty(info, chosenDiff){
+      const sets = info._difficultyBeatmapSets || info.difficultyBeatmapSets;
+      if(!Array.isArray(sets)) return null;
+      const std = sets.find(s => (s._beatmapCharacteristicName || s.beatmapCharacteristicName) === 'Standard') || sets[0];
+      const diffs = std ? (std._difficultyBeatmaps || std.difficultyBeatmaps) : null;
+      if(!Array.isArray(diffs)) return null;
+      const match = diffs.find(d => (d._beatmapFilename || d.beatmapFilename) === chosenDiff.file);
+      const njs = match ? (match._noteJumpMovementSpeed || match.noteJumpMovementSpeed || match._noteJumpSpeed || match.noteJumpSpeed) : null;
+      return (Number.isFinite(Number(njs)) && Number(njs) > 0) ? Number(njs) : null;
+    }
+
+    function njsToPxPerSec(njs){
+      const x = Number(njs || 0);
+      const slope = (700 - 580) / (20 - 10);
+      const intercept = 580 - slope * 10;
+      const v = intercept + slope * x;
+      return Math.max(200, Math.min(900, v));
+    }
+
+    const beatsToSeconds = (beat, bpm)=>{
+      const b = toFiniteNumber(beat);
+      const p = toFiniteNumber(bpm);
+      if(!Number.isFinite(b) || !Number.isFinite(p) || p <= 0) return NaN;
+      return (b * 60) / p;
+    };
+
+    function readBpmEvents(beatmapJson){
+      const arr = (beatmapJson && beatmapJson.bpmEvents) || (beatmapJson && beatmapJson._bpmEvents) || (beatmapJson && beatmapJson._BPMEvents) || null;
+      if(!Array.isArray(arr)) return [];
+      const out = [];
+      for(const e of arr){
+        const beat = toFiniteNumber((e && e.b) || (e && e._time) || (e && e.time));
+        const m = toFiniteNumber((e && e.m) || (e && e._multiplier) || (e && e.multiplier) || (e && e._bpm) || (e && e.bpm));
+        if(Number.isFinite(beat) && Number.isFinite(m) && m>0) out.push({ beat, m });
+      }
+      out.sort((a,b)=>a.beat-b.beat);
+      return out;
+    }
+
+    function readTimeSignatureEvents(beatmapJson){
+      const arr = (beatmapJson && beatmapJson.timeSignatureEvents) || (beatmapJson && beatmapJson._timeSignatureEvents) || null;
+      if(!Array.isArray(arr)) return [];
+      const out = [];
+      for(const e of arr){
+        const beat = toFiniteNumber((e && e.b) || (e && e._time) || (e && e.time));
+        const n = toFiniteNumber((e && e.n) || (e && e._numerator) || (e && e.numerator) || 4);
+        if(Number.isFinite(beat) && Number.isFinite(n) && n>0) out.push({ beat, numer: Math.round(n) });
+      }
+      out.sort((a,b)=>a.beat-b.beat);
+      return out;
+    }
+
+    function makeBeatToSec(baseBpm, bpmEvents){
+      const base = toFiniteNumber(baseBpm);
+      let events = Array.isArray(bpmEvents) ? bpmEvents : [];
+
+      const tmp = [];
+      for(const e of events){
+        const beat = toFiniteNumber((e && e.beat) || (e && e.b) || (e && e._time) || (e && e.time));
+        const m = toFiniteNumber((e && e.m) || (e && e.mult) || (e && e._multiplier) || (e && e.multiplier) || (e && e._bpm) || (e && e.bpm));
+        if(Number.isFinite(beat) && Number.isFinite(m) && m > 0) tmp.push({ beat, m });
+      }
+      tmp.sort((a,b)=>a.beat-b.beat);
+      events = tmp;
+
+      const ABS_THRESHOLD = 10;
+      let isAbsoluteBpm = false;
+      for(const e of events){ if(e.m > ABS_THRESHOLD){ isAbsoluteBpm = true; break; } }
+
+      const baseSafe = (Number.isFinite(base) && base > 0) ? base : 60;
+
+      if(!events.length || events[0].beat !== 0) events.unshift({ beat: 0, m: isAbsoluteBpm ? baseSafe : 1 });
+
+      const dedup = [];
+      for(const e of events){
+        if(!dedup.length || e.beat !== dedup[dedup.length-1].beat) dedup.push(e);
+        else dedup[dedup.length-1] = e;
+      }
+
+      const segs = [];
+      let cum = 0;
+      for(let i=0;i<dedup.length;i++){
+        const b0 = dedup[i].beat;
+        const bpm = isAbsoluteBpm ? dedup[i].m : (baseSafe * dedup[i].m);
+        const b1 = (i+1<dedup.length) ? dedup[i+1].beat : Infinity;
+        segs.push({ b0, b1, bpm, sec0: cum });
+        if(Number.isFinite(b1)) cum += beatsToSeconds((b1 - b0), bpm);
+      }
+
+      return function beatToSec(beat){
+        const b = toFiniteNumber(beat);
+        if(!Number.isFinite(b)) return NaN;
+        let lo=0, hi=segs.length-1;
+        while(lo<=hi){
+          const mid=(lo+hi)>>1;
+          const s=segs[mid];
+          if(b < s.b0) hi=mid-1;
+          else if(b >= s.b1) lo=mid+1;
+          else return s.sec0 + beatsToSeconds((b - s.b0), s.bpm);
+        }
+        const s=segs[segs.length-1];
+        return s.sec0 + beatsToSeconds((b - s.b0), s.bpm);
+      };
+    }
+
+    const clampInt = (v, lo, hi)=>{
+      const n = toFiniteNumber(v);
+      if(!Number.isFinite(n)) return null;
+      const i = Math.round(n);
+      if(i < lo || i > hi) return null;
+      return i;
+    };
+
+    // =========================
+    // LIGHT SHOW PARSING (Beat Saber v2/v3)
+    // =========================
+    function parseLightshowEvents(beatmapJson, bpm, songTimeOffsetSec=0){
+      const beatToSec = makeBeatToSec(bpm, readBpmEvents(beatmapJson));
+      const v3 = (beatmapJson && beatmapJson.basicBeatmapEvents) || (beatmapJson && beatmapJson._basicBeatmapEvents) || null;
+      const v2 = (beatmapJson && beatmapJson._events) || (beatmapJson && beatmapJson.events) || null;
+
+      const out=[];
+      const offset = toFiniteNumber(songTimeOffsetSec) || 0;
+
+      function mapLightValueToState(value){
+        const v = Math.round(toFiniteNumber(value) || 0);
+        if(v <= 0) return { state:'OFF', intensity:0 };
+        const isPrimary = (v===5 || v===6 || v===7);
+        const state = isPrimary ? 'RED' : 'PURPLE';
+        const intensity = (v===6 || v===2) ? 1.0 : (v===7 || v===3) ? 0.85 : 0.65;
+        return { state, intensity };
+      }
+
+      function fixtureForEventType(type){
+        const t = Math.round(toFiniteNumber(type) || 0);
+        if(t===0 || t===5) return { kind:'light', fixture:'backWash' };
+        if(t===1) return { kind:'light', fixture:'ring' };
+        if(t===2) return { kind:'light', fixture:'laserL' };
+        if(t===3) return { kind:'light', fixture:'laserR' };
+        if(t===4) return { kind:'light', fixture:'center' };
+        if(t===12) return { kind:'spin', fixture:'laserL' };
+        if(t===13) return { kind:'spin', fixture:'laserR' };
+        if(t===8)  return { kind:'spin', fixture:'center' };
+        if(t===9)  return { kind:'spin', fixture:'ring' };
+        return null;
+      }
+
+      function mapSpinSpeed(value, floatValue, fixture){
+        const fv = toFiniteNumber(floatValue);
+        const iv = toFiniteNumber(value);
+        let n = Number.isFinite(fv) ? fv : (Number.isFinite(iv) ? (iv/8) : 0);
+        n = Math.max(0, Math.min(1, n));
+        let speed = n * 4.2;
+        if(fixture==='laserR') speed *= -1;
+        return speed;
+      }
+
+      function pushEvent(timeSec, fixtureInfo, raw){
+        if(!fixtureInfo) return;
+        const t = toFiniteNumber(timeSec) + offset;
+        if(!Number.isFinite(t)) return;
+
+        if(fixtureInfo.kind==='light'){
+          const mapped = mapLightValueToState(raw.value);
+          const chroma = parseChromaColorFromCustomData(raw.customData);
+          out.push({
+            time: t,
+            kind: 'light',
+            fixture: fixtureInfo.fixture,
+            state: mapped.state,
+            intensity: mapped.intensity,
+            color: (chroma && chroma.hex) || null,
+            alpha: (chroma && Number.isFinite(chroma.alpha)) ? chroma.alpha : 1,
+          });
+          return;
+        }
+        if(fixtureInfo.kind==='spin'){
+          out.push({ time: t, kind:'spin', fixture: fixtureInfo.fixture, speed: mapSpinSpeed(raw.value, raw.floatValue, fixtureInfo.fixture) });
+        }
+      }
+
+      if(Array.isArray(v3)){
+        for(const e of v3){
+          const beat = toFiniteNumber((e && e.b) || (e && e._time) || (e && e.time));
+          if(!Number.isFinite(beat)) continue;
+          const time = beatToSec(beat);
+          pushEvent(time, fixtureForEventType((e && e.et) || (e && e._type) || (e && e.type)), {
+            value: (e && e.i) || (e && e._value) || (e && e.value),
+            floatValue: (e && e.f) || (e && e._floatValue) || (e && e.floatValue),
+            customData: (e && e.customData) || (e && e._customData) || null,
+          });
+        }
+      }
+
+      if(Array.isArray(v2)){
+        for(const e of v2){
+          const beat = toFiniteNumber((e && e._time) || (e && e.time));
+          if(!Number.isFinite(beat)) continue;
+          const time = beatToSec(beat);
+          pushEvent(time, fixtureForEventType((e && e._type) || (e && e.type)), {
+            value: (e && e._value) || (e && e.value),
+            floatValue: (e && e._floatValue) || (e && e.floatValue),
+            customData: (e && e._customData) || (e && e.customData) || null,
+          });
+        }
+      }
+
+      out.sort((a,b)=>a.time-b.time);
+
+      // compact duplicates
+      const DEDUP = 0.01;
+      const compact=[];
+      let lastKey='';
+      for(const ev of out){
+        const bucket = Math.round(ev.time/DEDUP);
+        const colKey = (ev.kind==='light' && ev.color) ? String(ev.color).toLowerCase() : '';
+        const aKey = (ev.kind==='light' && Number.isFinite(Number(ev.alpha))) ? Math.round(Number(ev.alpha)*100) : 100;
+        const key = `${bucket}|${ev.kind}|${ev.fixture}|${ev.kind==='light' ? (ev.state+':'+Math.round(ev.intensity*100)+':'+colKey+':'+aKey) : Math.round(ev.speed*100)}`;
+        if(key===lastKey) continue;
+        lastKey=key;
+        compact.push(ev);
+      }
+
+      return compact;
+    }
+
+    function parseBeatmapTo4Lane(beatmapJson, bpm, songTimeOffsetSec=0){
+      const bpmEvents = readBpmEvents(beatmapJson);
+      const timeSigs = readTimeSignatureEvents(beatmapJson);
+      const beatToSec = makeBeatToSec(bpm, bpmEvents);
+
+      let rawNotes = null;
+      if(Array.isArray(beatmapJson.colorNotes)) rawNotes = beatmapJson.colorNotes;
+      else if(Array.isArray(beatmapJson._colorNotes)) rawNotes = beatmapJson._colorNotes;
+      else if(Array.isArray(beatmapJson._notes)) rawNotes = beatmapJson._notes;
+      else if(Array.isArray(beatmapJson.notes)) rawNotes = beatmapJson.notes;
+      if(!rawNotes) throw new Error('Beatmap has no recognizable notes array (expected colorNotes or _notes).');
+
+      // Bombs (v3: bombNotes, v2: _notes with type===3)
+      let rawBombs = null;
+      if(Array.isArray(beatmapJson.bombNotes)) rawBombs = beatmapJson.bombNotes;
+      else if(Array.isArray(beatmapJson._bombNotes)) rawBombs = beatmapJson._bombNotes;
+
+      // Walls / obstacles
+      const rawObstaclesV2 = Array.isArray(beatmapJson._obstacles) ? beatmapJson._obstacles : (Array.isArray(beatmapJson.obstacles) ? beatmapJson.obstacles : null);
+      const rawObstaclesV3 = Array.isArray(beatmapJson.obstacles) ? beatmapJson.obstacles : (Array.isArray(beatmapJson._obstacles) ? beatmapJson._obstacles : null);
+
+      const offset = toFiniteNumber(songTimeOffsetSec) || 0;
+      const NOTE_DEDUP = 0.002;
+
+      const out=[];
+      const bombs=[];
+      const walls=[];
+      const seen = new Set();
+      let maxBeat = 0;
+
+      for(const n of rawNotes){
+        // v3-like notes
+        if(n && ('b' in n) && ('x' in n)){
+          const beat = toFiniteNumber(n.b);
+          const lane = clampInt(n.x, 0, 3);
+          if(lane === null || !Number.isFinite(beat)) continue;
+          const t = beatToSec(beat) + offset;
+          if(!Number.isFinite(t)) continue;
+          const key = lane + ':' + Math.round(t/NOTE_DEDUP);
+          if(seen.has(key)) continue;
+          seen.add(key);
+          out.push({ lane, time: t, beat, hit:false, missed:false });
+          if(beat > maxBeat) maxBeat = beat;
+          continue;
+        }
+
+        // v2-like
+        const beat = toFiniteNumber((n && n._time) || (n && n.time));
+        const laneRaw = (n && n._lineIndex) || (n && n.lineIndex);
+        const type = (n && n._type) || (n && n.type);
+        if(type === 3){
+          // bomb in v2
+          const laneB = clampInt(laneRaw, 0, 3);
+          if(laneB === null || !Number.isFinite(beat)) continue;
+          const tb = beatToSec(beat) + offset;
+          if(!Number.isFinite(tb)) continue;
+          bombs.push({ lane: laneB, time: tb, beat });
+          if(beat > maxBeat) maxBeat = beat;
+          continue;
+        }
+
+        const lane = clampInt(laneRaw, 0, 3);
+        if(lane === null || !Number.isFinite(beat)) continue;
+        const t = beatToSec(beat) + offset;
+        if(!Number.isFinite(t)) continue;
+        const key = lane + ':' + Math.round(t/NOTE_DEDUP);
+        if(seen.has(key)) continue;
+        seen.add(key);
+        out.push({ lane, time: t, beat, hit:false, missed:false });
+        if(beat > maxBeat) maxBeat = beat;
+      }
+
+      // v3 bombs
+      if(Array.isArray(rawBombs)){
+        for(const b of rawBombs){
+          const beat = toFiniteNumber((b && b.b) || (b && b._time) || (b && b.time));
+          const lane = clampInt((b && b.x) || (b && b._lineIndex) || (b && b.lineIndex), 0, 3);
+          if(lane === null || !Number.isFinite(beat)) continue;
+          const t = beatToSec(beat) + offset;
+          if(!Number.isFinite(t)) continue;
+          bombs.push({ lane, time: t, beat });
+          if(beat > maxBeat) maxBeat = beat;
+        }
+      }
+
+      function durationBeatToSec(startBeat, durBeat){
+        const sb = toFiniteNumber(startBeat);
+        const db = toFiniteNumber(durBeat);
+        if(!Number.isFinite(sb) || !Number.isFinite(db) || db <= 0) return NaN;
+        const t0 = beatToSec(sb);
+        const t1 = beatToSec(sb + db);
+        return (Number.isFinite(t0) && Number.isFinite(t1)) ? (t1 - t0) : NaN;
+      }
+
+      // v2 obstacles
+      if(Array.isArray(rawObstaclesV2)){
+        for(const o of rawObstaclesV2){
+          if(o && (('_time' in o) || ('_lineIndex' in o) || ('_duration' in o))){
+            const type = toFiniteNumber((o && o._type) || (o && o.type));
+            if(type === 1) continue; // duck walls excluded
+            const beat = toFiniteNumber((o && o._time) || (o && o.time));
+            const lane = clampInt((o && o._lineIndex) || (o && o.lineIndex), 0, 3);
+            const width = clampInt((o && o._width) || (o && o.width) || 1, 1, 4);
+            const durBeat = toFiniteNumber((o && o._duration) || (o && o.duration));
+            if(lane === null || !Number.isFinite(beat) || !Number.isFinite(durBeat)) continue;
+
+            const durSec = durationBeatToSec(beat, durBeat);
+            if(!Number.isFinite(durSec) || durSec <= 0) continue;
+
+            const t0 = beatToSec(beat) + offset;
+            const t1 = t0 + durSec;
+
+            const chroma = parseChromaColorFromCustomData((o && o._customData) || (o && o.customData) || null);
+            walls.push({ lane, width: Math.min(4-lane, width), time: t0, end: t1, beat, color: (chroma && chroma.hex) || null, alpha: (chroma && Number.isFinite(chroma.alpha)) ? chroma.alpha : 1 });
+            if(beat + durBeat > maxBeat) maxBeat = beat + durBeat;
+          }
+        }
+      }
+
+      // v3 obstacles
+      if(Array.isArray(rawObstaclesV3)){
+        for(const o of rawObstaclesV3){
+          if(!o || !('b' in o) || !('x' in o) || !('d' in o)) continue;
+          const beat = toFiniteNumber(o.b);
+          const lane = clampInt(o.x, 0, 3);
+          const y = toFiniteNumber(o.y || 0);
+          if(y === 2) continue; // duck walls excluded
+          const width = clampInt(o.w || 1, 1, 4);
+          const durBeat = toFiniteNumber(o.d);
+          if(lane === null || !Number.isFinite(beat) || !Number.isFinite(durBeat)) continue;
+
+          const durSec = durationBeatToSec(beat, durBeat);
+          if(!Number.isFinite(durSec) || durSec <= 0) continue;
+
+          const t0 = beatToSec(beat) + offset;
+          const t1 = t0 + durSec;
+
+          const chroma = parseChromaColorFromCustomData(o.customData || o._customData || null);
+          walls.push({ lane, width: Math.min(4-lane, width), time: t0, end: t1, beat, color: (chroma && chroma.hex) || null, alpha: (chroma && Number.isFinite(chroma.alpha)) ? chroma.alpha : 1 });
+          if(beat + durBeat > maxBeat) maxBeat = beat + durBeat;
+        }
+      }
+
+      out.sort((a,b)=>a.time-b.time);
+      bombs.sort((a,b)=>a.time-b.time);
+      walls.sort((a,b)=>a.time-b.time);
+
+      const durationEst = out.length ? (out[out.length-1].time + 2.0) : 0;
+
+      const beatStep = 1;
+      const endBeat = Math.ceil(maxBeat) + 12;
+      const beatLines = [];
+
+      let tsIdx = 0;
+      let numer = 4;
+      let barStartBeat = 0;
+      const ts = Array.isArray(timeSigs) ? timeSigs : [];
+
+      for(let b=0; b<=endBeat; b+=beatStep){
+        while(tsIdx < ts.length && ts[tsIdx].beat <= b){
+          numer = ts[tsIdx].numer || 4;
+          barStartBeat = ts[tsIdx].beat;
+          tsIdx++;
+        }
+        const time = beatToSec(b) + offset;
+        beatLines.push({ time, bar: (((b - barStartBeat) % numer) === 0) });
+      }
+
+      const lightEvents = parseLightshowEvents(beatmapJson, bpm, songTimeOffsetSec);
+
+      return { notes: out, bombs, walls, duration: durationEst, bpm, beatLines, bpmEvents, timeSigs, lightEvents };
+    }
+
+    // =========================
+    // Audio Engine
+    // =========================
+    const AudioEngine = (function(){
+      let ctx=null, master=null, musicGain=null;
+      let sfxGain=null, noiseBuffer=null;
+
+      let buffer=null;
+      let source=null;
+      let anchor={songTime:0, ctxTime:0};
+      let playing=false;
+
+      function ensure(){
+        if(!ctx){
+          const AC = window.AudioContext || window.webkitAudioContext;
+          ctx = new AC();
+          master = ctx.createGain(); master.gain.value = 1.0;
+          musicGain = ctx.createGain(); musicGain.gain.value = 0.7;
+          musicGain.connect(master);
+          master.connect(ctx.destination);
+        }
+        return ctx;
+      }
+
+      async function resume(){ ensure(); if(ctx.state!=='running') await ctx.resume(); }
+      async function suspend(){ if(ctx && ctx.state==='running') await ctx.suspend(); }
+
+      function setVolume(v){ ensure(); if(musicGain && ctx) musicGain.gain.setTargetAtTime(Number(v), ctx.currentTime, 0.01); }
+
+      async function setSongBuffer(audioBuf){
+        ensure();
+        stop();
+        buffer = audioBuf;
+      }
+
+      function setAnchor(songTime, ctxTimeOverride=null){
+        ensure();
+        anchor.songTime = Number(songTime) || 0;
+        anchor.ctxTime = (ctxTimeOverride!==null && ctxTimeOverride!==undefined) ? Number(ctxTimeOverride) : ctx.currentTime;
+      }
+
+      function nowSong(){
+        if(!ctx) return anchor.songTime;
+        return Math.max(0, anchor.songTime + (ctx.currentTime - anchor.ctxTime));
+      }
+
+      function start(atSongTime=0){
+        ensure();
+        if(!buffer) throw new Error('No song loaded');
+        stop();
+        source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(musicGain);
+
+        const when = ctx.currentTime + 0.02;
+        const offset = Math.max(0, Number(atSongTime) || 0);
+        setAnchor(offset, when);
+
+        try{ source.start(when, offset); } catch(e){}
+        playing = true;
+      }
+
+      function stop(){
+        if(source){
+          try{ source.stop(); } catch(e){}
+          try{ source.disconnect(); } catch(e){}
+          source = null;
+        }
+        playing = false;
+      }
+
+      function isPlaying(){ return playing; }
+
+      function playTick(){
+        ensure();
+        if(!ctx) return;
+
+        if(!sfxGain){
+          sfxGain = ctx.createGain();
+          sfxGain.gain.value = 0.55;
+          sfxGain.connect(master);
+        }
+
+        if(!noiseBuffer){
+          const dur = 0.12;
+          const len = Math.max(1, Math.floor(ctx.sampleRate * dur));
+          noiseBuffer = ctx.createBuffer(1, len, ctx.sampleRate);
+          const d = noiseBuffer.getChannelData(0);
+          for(let i=0;i<len;i++) d[i] = (Math.random()*2-1);
+        }
+
+        const t0 = ctx.currentTime;
+
+        const nsrc = ctx.createBufferSource();
+        nsrc.buffer = noiseBuffer;
+
+        const hp = ctx.createBiquadFilter();
+        hp.type = 'highpass';
+        hp.frequency.setValueAtTime(1800, t0);
+
+        const bp = ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.setValueAtTime(4200, t0);
+        bp.Q.setValueAtTime(8.5, t0);
+
+        const ng = ctx.createGain();
+        ng.gain.setValueAtTime(0.0001, t0);
+        ng.gain.linearRampToValueAtTime(0.35, t0 + 0.002);
+        ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.045);
+
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(950, t0);
+        osc.frequency.exponentialRampToValueAtTime(520, t0 + 0.02);
+
+        const og = ctx.createGain();
+        og.gain.setValueAtTime(0.0001, t0);
+        og.gain.linearRampToValueAtTime(0.20, t0 + 0.0015);
+        og.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.03);
+
+        nsrc.connect(hp).connect(bp).connect(ng).connect(sfxGain);
+        osc.connect(og).connect(sfxGain);
+
+        try{
+          nsrc.start(t0);
+          nsrc.stop(t0 + 0.06);
+          osc.start(t0);
+          osc.stop(t0 + 0.04);
+        }catch{}
+      }
+
+      return { ensure, resume, suspend, setVolume, setSongBuffer, start, stop, setAnchor, nowSong, isPlaying, playTick };
+    })();
+
+    // =========================
+    // Utilities / Drawing helpers
+    // =========================
+    const CONFIG = Object.freeze({
+      LANES: 4,
+      COLORS: ['#25d34f', '#ff3b3b', '#ffd84a', '#4ab2ff'],
+      HIT_WINDOW_PX: 28,
+    });
+
+    // Lighting defaults (easy to tweak)
+    const LIGHTING_DEFAULTS = Object.freeze({
+      mode: 'pulseDecay',       // 'pulseDecay' | 'strictPersist'
+      pulseDecayMs: 300,        // fade-back duration for pulseDecay
+      ambientWhenNoEvents: 0.10,// faint baseline glow when a map has no authored light events
+      ambientWhenEvents: 0.00,  // optional baseline even when events exist
+    });
+
+    const OUTLINE = 'rgba(0,0,0,0.45)';
+    const WHITE = '#eaf0ff';
+
+    const LIGHT_OFF = '#07070a';
+    const LIGHT_RED = '#ff2a58';
+    const LIGHT_PURPLE = '#b040ff';
+
+    function roundedRect(ctx,x,y,w,h,r){
+      const rr=Math.min(r,w/2,h/2);
+      ctx.beginPath();
+      ctx.moveTo(x+rr,y);
+      ctx.arcTo(x+w,y,x+w,y+h,rr);
+      ctx.arcTo(x+w,y+h,x,y+h,rr);
+      ctx.arcTo(x,y+h,x,y,rr);
+      ctx.arcTo(x,y,x+w,y,rr);
+      ctx.closePath();
+    }
+
+    function hexToRgba(hex,a=1){
+      const c=String(hex).replace('#','');
+      const n=parseInt(c,16);
+      const r=(n>>16)&255, g=(n>>8)&255, b=n&255;
+      return `rgba(${r},${g},${b},${a})`;
+    }
+
+    function shade(hex,percent){
+      const c=parseInt(hex.slice(1),16);
+      let r=(c>>16)&255,g=(c>>8)&255,b=c&255;
+      r=Math.round(r*(100+percent)/100);
+      g=Math.round(g*(100+percent)/100);
+      b=Math.round(b*(100+percent)/100);
+      r=Math.min(255,Math.max(0,r));
+      g=Math.min(255,Math.max(0,g));
+      b=Math.min(255,Math.max(0,b));
+      return '#'+(1<<24|r<<16|g<<8|b).toString(16).slice(1);
+    }
+
+    const pointInRect=(px,py,r)=> px>=r.x && px<=r.x+r.w && py>=r.y && py<=r.y+r.h;
+    const clamp01=(x)=> Math.max(0, Math.min(1, Number(x)||0));
+
+    function lightColorForState(state, customColor=null){
+      // Swap: RED renders purple, PURPLE renders red.
+      // Chroma custom colors bypass swap.
+      if(customColor) return customColor;
+      if(state==='RED') return LIGHT_PURPLE;
+      if(state==='PURPLE') return LIGHT_RED;
+      return LIGHT_OFF;
+    }
+
+    function pickBrightest(...states){
+      let best = { state:'OFF', intensity:0, color:null };
+      for(const s of states){
+        if(!s) continue;
+        const i = clamp01(s.intensity);
+        if(i > best.intensity){
+          best = { state: (s.state || 'OFF'), intensity:i, color: (s.color || null) };
+        }
+      }
+      return best;
+    }
+
+    function ambientState(strength){
+      const s = clamp01(strength);
+      if(s <= 0.0001) return { state:'OFF', intensity:0, color:null };
+      return { state:'PURPLE', intensity:s, color:null };
+    }
+
+    // Note vs bomb overlap (note overrides bomb on same lane/time bucket)
+    const BOMB_OCC_BUCKET = 0.01; // 10ms
+    const timeBucket = (t)=> Math.round(Number(t||0) / BOMB_OCC_BUCKET);
+    function noteBucketsForLane(notes, start, end, lane){
+      const s = new Set();
+      for(let idx=start; idx<end; idx++){
+        const n = notes[idx];
+        if(!n || n.lane!==lane || n.hit || n.missed) continue;
+        s.add(timeBucket(n.time));
+      }
+      return s;
+    }
+
+    // =========================
+    // View & Renderer
+    // =========================
+    class View{
+      constructor(canvas){
+        this.canvas=canvas;
+        this.ctx=canvas.getContext('2d');
+        this.w=0; this.h=0;
+        this.track={x:0,y:0,w:0,h:0,laneW:0,gap:8};
+        this.padY=0; this.hitLineY=0; this.lanePads=[];
+
+        // Shared perspective parameters
+        this.persp = {
+          topScale: 0.62,
+          bulge: 0.06,
+          topInsetY: 22,
+          bottomInsetY: 14,
+        };
+
+        window.addEventListener('resize',()=>this.resize());
+        this.resize();
+      }
+      resize(){
+        const dpr=Math.max(1,window.devicePixelRatio||1);
+        const cssW=this.canvas.clientWidth;
+        const cssH=this.canvas.clientHeight;
+        this.canvas.width=Math.round(cssW*dpr);
+        this.canvas.height=Math.round(cssH*dpr);
+        this.ctx.setTransform(dpr,0,0,dpr,0,0);
+        this.w=cssW; this.h=cssH;
+        this.layout();
+      }
+      layout(){
+        const t=this.track;
+        t.h=Math.max(420,this.h*0.86);
+        t.w=Math.min(680,Math.max(360,this.w*0.56));
+        t.x=(this.w-t.w)/2;
+        t.y=(this.h-t.h)/2;
+        t.laneW=(t.w - t.gap*(CONFIG.LANES-1))/CONFIG.LANES;
+        this.padY=t.y + t.h - 86 - 8;
+        this.hitLineY=this.padY - 10;
+        this.lanePads.length=0;
+        for(let i=0;i<CONFIG.LANES;i++){
+          const x=t.x + i*(t.laneW + t.gap);
+          this.lanePads.push({x, y:this.padY, w:t.laneW, h:86, lane:i});
+        }
+      }
+
+      highwayTopY(){ return this.track.y + (this.persp.topInsetY||0); }
+      highwayBottomY(){ return this.track.y + this.track.h - (this.persp.bottomInsetY||0); }
+
+      highwayU(y){
+        const y0=this.highwayTopY();
+        const y1=this.highwayBottomY();
+        return clamp01((y - y0) / Math.max(1, (y1 - y0)));
+      }
+
+      scaleAtU(u){
+        const p=this.persp;
+        const s=u*u*(3-2*u); // smoothstep
+        const base = p.topScale + (1 - p.topScale) * s;
+        const bulge = (p.bulge||0) * Math.sin(Math.PI * u);
+        return Math.max(0.35, base + bulge);
+      }
+
+      widthAtY(y){
+        const t=this.track;
+        const u=this.highwayU(y);
+        return t.w * this.scaleAtU(u);
+      }
+
+      leftAtY(y){
+        const t=this.track;
+        const w=this.widthAtY(y);
+        return (t.x + t.w/2) - w/2;
+      }
+
+      laneWAtY(y){ return this.widthAtY(y) / CONFIG.LANES; }
+
+      laneCenterAtY(lane, y){
+        const left=this.leftAtY(y);
+        const lw=this.laneWAtY(y);
+        return left + (lane + 0.5) * lw;
+      }
+
+      trackPoly(pad=0){
+        const t=this.track;
+        const y0=t.y - pad;
+        const y1=t.y + t.h + pad;
+        const u0=this.highwayU(y0);
+        const u1=this.highwayU(y1);
+        const sc0=this.scaleAtU(u0);
+        const sc1=this.scaleAtU(u1);
+        const cx=t.x + t.w/2;
+        const topW = (t.w + pad*2) * sc0;
+        const botW = (t.w + pad*2) * sc1;
+        return {
+          top: { x0: cx - topW/2, x1: cx + topW/2, y: y0 },
+          bot: { x0: cx - botW/2, x1: cx + botW/2, y: y1 },
+          cx, y0, y1,
+        };
+      }
+    }
+
+    class Renderer{
+      constructor(view){ this.v=view; this.ctx=view.ctx; }
+
+      draw(game, paused=false){
+        const {ctx,v}=this;
+        ctx.clearRect(0,0,v.w,v.h);
+        this.backdrop();
+
+        this.stageLightShow(game);
+
+        ctx.save();
+        this.clipTrackTrapezoid();
+
+        this.track();
+        for(let i=0;i<CONFIG.LANES;i++) this.laneBg(i);
+        this.fretLines(game);
+
+        // Walls behind everything, then bombs, then notes
+        this.walls(game);
+        for(let i=0;i<CONFIG.LANES;i++) this.laneBombs(i,game);
+        for(let i=0;i<CONFIG.LANES;i++) this.laneNotes(i,game);
+
+        // Hit line
+        ctx.save();
+        ctx.globalCompositeOperation='lighter';
+        ctx.strokeStyle='rgba(234, 240, 255, 0.6)';
+        ctx.lineWidth=2.5;
+        const y=v.hitLineY;
+        const left = v.leftAtY(y);
+        const right = left + v.widthAtY(y);
+        ctx.beginPath();
+        ctx.moveTo(left, y);
+        ctx.lineTo(right, y);
+        ctx.stroke();
+        ctx.restore();
+
+        // Particles
+        for(let i=0;i<game.pCount;i++){
+          const p=game.particles[i];
+          const a=1-(p.t/p.life);
+          ctx.fillStyle=hexToRgba(p.color, 0.2 + 0.6*a);
+          ctx.beginPath();
+          ctx.arc(p.x,p.y,3+2*a,0,Math.PI*2);
+          ctx.fill();
+        }
+
+        ctx.restore();
+
+        this.highwayCenterFade();
+
+        // Pads remain unwarped
+        for(let i=0;i<CONFIG.LANES;i++) this.pad(i,game);
+
+        if(!game.running && !game.ended){
+          this.banner(game.loaded ? 'Press Space or Start to Play' : 'Load a Beat Saber ZIP to begin');
+        }
+        if(paused) this.banner('Paused — Press P to Resume', 0.8);
+      }
+
+      clipTrackTrapezoid(){
+        const {ctx,v}=this;
+        const poly = v.trackPoly(18);
+        ctx.beginPath();
+        ctx.moveTo(poly.top.x0, poly.top.y);
+        ctx.lineTo(poly.top.x1, poly.top.y);
+        ctx.lineTo(poly.bot.x1, poly.bot.y);
+        ctx.lineTo(poly.bot.x0, poly.bot.y);
+        ctx.closePath();
+        ctx.clip();
+      }
+
+      highwayCenterFade(){
+        const {ctx,v}=this;
+        const t=v.track;
+        const poly=v.trackPoly(22);
+
+        // NOTE HIGHWAY: very semi transparent (requested)
+        ctx.save();
+        ctx.globalCompositeOperation='source-over';
+        ctx.beginPath();
+        ctx.moveTo(poly.top.x0, poly.top.y);
+        ctx.lineTo(poly.top.x1, poly.top.y);
+        ctx.lineTo(poly.bot.x1, poly.bot.y);
+        ctx.lineTo(poly.bot.x0, poly.bot.y);
+        ctx.closePath();
+        ctx.fillStyle='rgba(255,255,255,0.02)';
+        ctx.fill();
+        ctx.restore();
+
+        // keep center fade subtle
+        ctx.save();
+        ctx.globalCompositeOperation='multiply';
+        ctx.beginPath();
+        ctx.moveTo(poly.top.x0, poly.top.y);
+        ctx.lineTo(poly.top.x1, poly.top.y);
+        ctx.lineTo(poly.bot.x1, poly.bot.y);
+        ctx.lineTo(poly.bot.x0, poly.bot.y);
+        ctx.closePath();
+        ctx.clip();
+
+        const cx = t.x + t.w/2;
+        const cy = t.y + t.h*0.55;
+        const r0 = Math.min(t.w,t.h)*0.08;
+        const r1 = Math.max(t.w,t.h)*0.95;
+        const g = ctx.createRadialGradient(cx,cy,r0,cx,cy,r1);
+        g.addColorStop(0, 'rgba(255,255,255,1)');
+        g.addColorStop(0.55, 'rgba(230,230,230,1)');
+        g.addColorStop(1,   'rgba(160,160,160,1)');
+        ctx.fillStyle=g;
+        ctx.fillRect(poly.top.x0-120, poly.top.y-120, (poly.top.x1-poly.top.x0)+240, (poly.bot.y-poly.top.y)+240);
+        ctx.restore();
+
+        ctx.save();
+        ctx.globalCompositeOperation='lighter';
+        ctx.beginPath();
+        ctx.moveTo(poly.top.x0, poly.top.y);
+        ctx.lineTo(poly.top.x1, poly.top.y);
+        ctx.lineTo(poly.bot.x1, poly.bot.y);
+        ctx.lineTo(poly.bot.x0, poly.bot.y);
+        ctx.closePath();
+        ctx.clip();
+
+        const g2 = ctx.createRadialGradient(cx, t.y + t.h*0.45, Math.min(t.w,t.h)*0.02, cx, t.y + t.h*0.45, Math.max(t.w,t.h)*0.72);
+        g2.addColorStop(0, 'rgba(255,255,255,0.08)');
+        g2.addColorStop(0.35, 'rgba(255,255,255,0.03)');
+        g2.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle=g2;
+        ctx.fillRect(poly.top.x0-160, poly.top.y-160, (poly.top.x1-poly.top.x0)+320, (poly.bot.y-poly.top.y)+320);
+        ctx.restore();
+      }
+
+      backdrop(){
+        const {ctx,v}=this;
+        // completely black background
+        ctx.fillStyle='#000';
+        ctx.fillRect(0,0,v.w,v.h);
+
+        // tiny vignette so lights feel like stage, but still black
+        const g=ctx.createRadialGradient(
+          v.w/2, v.h*0.25, Math.min(v.w,v.h)*0.15,
+          v.w/2, v.h*0.25, Math.max(v.w,v.h)*0.9
+        );
+        g.addColorStop(0,'rgba(255,255,255,0.03)');
+        g.addColorStop(1,'rgba(0,0,0,0.0)');
+        ctx.fillStyle=g;
+        ctx.fillRect(0,0,v.w,v.h);
+      }
+
+      stageLightShow(game){
+        this.drawBackWash(game);
+        this.drawSideColumns(game);
+        this.drawRotatingLasers(game);
+        this.drawCenterSpinner(game);
+      }
+
+      drawBackWash(game){
+        const {ctx,v}=this;
+        const t=v.track;
+
+        const fx = (game && game.fixture) ? game.fixture : null;
+        const back = (fx && fx.backWash) ? fx.backWash : {state:'OFF', intensity:0, color:null};
+        const ring = (fx && fx.ring) ? fx.ring : {state:'OFF', intensity:0, color:null};
+        const center = (fx && fx.center) ? fx.center : {state:'OFF', intensity:0, color:null};
+
+        // faint ambient when map has no light events
+        const amb = (!game.hasLightEvents) ? ambientState(game.ambientWhenNoEvents) : ambientState(game.ambientWhenEvents);
+        const mix = pickBrightest(back, ring, center, amb);
+
+        const col = lightColorForState(mix.state, mix.color);
+        const i = clamp01(mix.intensity);
+        if(i <= 0.01) return;
+        ctx.save();
+        ctx.globalCompositeOperation='lighter';
+        const gx = t.x + t.w/2;
+        const gy = t.y + t.h*0.30;
+        const r0 = Math.min(t.w,t.h)*0.05;
+        const r1 = Math.max(t.w,t.h)*0.85;
+        const g = ctx.createRadialGradient(gx,gy,r0,gx,gy,r1);
+        g.addColorStop(0, hexToRgba(col, 0.08 + 0.22*i));
+        g.addColorStop(0.55, hexToRgba(col, 0.04 + 0.10*i));
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle=g;
+        ctx.fillRect(t.x - 260, t.y - 220, t.w + 520, t.h + 520);
+        ctx.restore();
+      }
+
+      drawSideColumns(game){
+        const {ctx,v}=this;
+        const t=v.track;
+        const sidePad = 14;
+        const gap = 14;
+        const maxSideW = Math.min(220, Math.max(120, (v.w - t.w)/2 - gap - sidePad));
+        if(maxSideW <= 40) return;
+        const panelH = t.h + 32;
+        const panelY = t.y - 16;
+        const leftX  = t.x - gap - maxSideW;
+        const rightX = t.x + t.w + gap;
+
+        const fx = (game && game.fixture) ? game.fixture : null;
+        const back = (fx && fx.backWash) ? fx.backWash : null;
+        const ring = (fx && fx.ring) ? fx.ring : null;
+        const lzL = (fx && fx.laserL) ? fx.laserL : null;
+        const lzR = (fx && fx.laserR) ? fx.laserR : null;
+
+        const amb = (!game.hasLightEvents) ? ambientState(game.ambientWhenNoEvents) : ambientState(game.ambientWhenEvents);
+
+        const colL = pickBrightest(back, ring, lzL, amb);
+        const colR = pickBrightest(back, ring, lzR, amb);
+
+        this.drawLightPanel(leftX, panelY, maxSideW, panelH, colL, 'L');
+        this.drawLightPanel(rightX, panelY, maxSideW, panelH, colR, 'R');
+      }
+
+      drawLightPanel(x,y,w,h,stateObj,side){
+        const {ctx}=this;
+        const intensity = clamp01((stateObj && stateObj.intensity));
+        const state = (stateObj && stateObj.state) || 'OFF';
+        const baseCol = lightColorForState(state, (stateObj && stateObj.color) || null);
+
+        ctx.save();
+        roundedRect(ctx, x, y, w, h, 18);
+        ctx.fillStyle = 'rgba(0,0,0,0.30)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        const bg = ctx.createLinearGradient(0,y,0,y+h);
+        bg.addColorStop(0,'rgba(255,255,255,0.02)');
+        bg.addColorStop(1,'rgba(0,0,0,0.18)');
+        roundedRect(ctx, x+1, y+1, w-2, h-2, 17);
+        ctx.fillStyle = bg;
+        ctx.fill();
+
+        const beamCount = 7;
+        const innerX = x + 12;
+        const innerY = y + 14;
+        const innerW = w - 24;
+        const innerH = h - 28;
+
+        if(intensity > 0.01){
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          const glow = ctx.createRadialGradient(x+w/2, y+h*0.25, 10, x+w/2, y+h*0.25, Math.max(w,h));
+          glow.addColorStop(0, hexToRgba(baseCol, 0.20 + 0.40*intensity));
+          glow.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = glow;
+          ctx.fillRect(x-40,y-40,w+80,h+80);
+          ctx.restore();
+        }
+
+        ctx.save();
+        ctx.globalCompositeOperation='lighter';
+        for(let i=0;i<beamCount;i++){
+          const u = i/(beamCount-1);
+          const bx = innerX + u*innerW;
+          const tilt = (side==='L' ? -1 : 1) * (0.18 + 0.22*u);
+          const topX = bx + tilt*innerW*0.35;
+          const botX = bx - tilt*innerW*0.25;
+
+          const beamW = 10 + 28*intensity;
+          const alpha = (0.05 + 0.24*intensity) * (0.65 + 0.35*Math.cos(u*Math.PI));
+
+          const lg = ctx.createLinearGradient(topX, innerY, botX, innerY+innerH);
+          lg.addColorStop(0, hexToRgba(baseCol, alpha*0.35));
+          lg.addColorStop(0.4, hexToRgba(baseCol, alpha));
+          lg.addColorStop(1, 'rgba(0,0,0,0)');
+
+          ctx.fillStyle = lg;
+          ctx.beginPath();
+          ctx.moveTo(topX-beamW*0.4, innerY);
+          ctx.lineTo(topX+beamW*0.4, innerY);
+          ctx.lineTo(botX+beamW, innerY+innerH);
+          ctx.lineTo(botX-beamW, innerY+innerH);
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.restore();
+
+        const ledY = y + h - 18;
+        const segs = 10;
+        const segGap = 4;
+        const segW = (w - 24 - segGap*(segs-1)) / segs;
+        for(let i=0;i<segs;i++){
+          const xx = x + 12 + i*(segW+segGap);
+          const a = (0.08 + 0.55*intensity) * (0.4 + 0.6*(i/segs));
+          ctx.fillStyle = (state==='OFF') ? hexToRgba(LIGHT_OFF, 0.9) : hexToRgba(baseCol, a);
+          roundedRect(ctx, xx, ledY, segW, 6, 3);
+          ctx.fill();
+        }
+
+        ctx.restore();
+      }
+
+      drawRotatingLasers(game){
+        const {ctx,v}=this;
+        const t=v.track;
+        const fx = (game && game.fixture) ? game.fixture : null;
+        const L = (fx && fx.laserL) ? fx.laserL : {state:'OFF', intensity:0, angle:0, color:null};
+        const R = (fx && fx.laserR) ? fx.laserR : {state:'OFF', intensity:0, angle:0, color:null};
+        const py = t.y + t.h*0.26;
+        const leftPivot  = { x: t.x - 46, y: py };
+        const rightPivot = { x: t.x + t.w + 46, y: py };
+        this.drawLaserBeam(leftPivot.x, leftPivot.y, L, true, t);
+        this.drawLaserBeam(rightPivot.x, rightPivot.y, R, false, t);
+      }
+
+      drawLaserBeam(px,py,st,isLeft,track){
+        const {ctx}=this;
+        const i = clamp01(st.intensity);
+        if(i<=0.01) return;
+        const col = lightColorForState(st.state, st.color || null);
+        const ang = Number(st.angle) || 0;
+        const base = isLeft ? 0 : Math.PI;
+        const a = base + ang;
+        const len = Math.max(track.w*0.55, 420);
+        const w0 = 10 + 14*i;
+        const w1 = 160 + 260*i;
+        const dx = Math.cos(a);
+        const dy = Math.sin(a);
+        const ex = px + dx*len;
+        const ey = py + dy*len;
+        const nx = -dy;
+        const ny = dx;
+
+        ctx.save();
+        ctx.globalCompositeOperation='lighter';
+
+        const grad = ctx.createLinearGradient(px,py,ex,ey);
+        grad.addColorStop(0, hexToRgba(col, 0.18 + 0.36*i));
+        grad.addColorStop(0.25, hexToRgba(col, 0.10 + 0.20*i));
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(px + nx*w0, py + ny*w0);
+        ctx.lineTo(px - nx*w0, py - ny*w0);
+        ctx.lineTo(ex - nx*w1, ey - ny*w1);
+        ctx.lineTo(ex + nx*w1, ey + ny*w1);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = hexToRgba(col, 0.10 + 0.35*i);
+        ctx.beginPath();
+        ctx.arc(px,py, 10 + 14*i, 0, Math.PI*2);
+        ctx.fill();
+
+        ctx.restore();
+      }
+
+      drawCenterSpinner(game){
+        const {ctx,v}=this;
+        const t=v.track;
+        const fx = (game && game.fixture) ? game.fixture : null;
+        const C = (fx && fx.center) ? fx.center : {state:'OFF', intensity:0, angle:0, color:null};
+        const i = clamp01(C.intensity);
+        if(i<=0.01) return;
+        const col = lightColorForState(C.state, C.color || null);
+        const ang = Number(C.angle) || 0;
+        const cx = t.x + t.w/2;
+        const cy = t.y + t.h*0.28;
+        const r = Math.min(140, Math.max(86, t.w*0.22));
+
+        ctx.save();
+        ctx.globalCompositeOperation='lighter';
+
+        const g = ctx.createRadialGradient(cx,cy, r*0.12, cx,cy, r*2.2);
+        g.addColorStop(0, hexToRgba(col, 0.14 + 0.32*i));
+        g.addColorStop(0.45, hexToRgba(col, 0.07 + 0.14*i));
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle=g;
+        ctx.fillRect(cx - r*3, cy - r*3, r*6, r*6);
+
+        const spokes = 8;
+        for(let k=0;k<spokes;k++){
+          const a0 = ang + k*(Math.PI*2/spokes);
+          const a1 = a0 + (0.20 + 0.18*i);
+          const ir = r*0.25;
+          const or = r*(1.55 + 0.55*i);
+
+          const p0 = {x: cx + Math.cos(a0)*ir, y: cy + Math.sin(a0)*ir};
+          const p1 = {x: cx + Math.cos(a1)*ir, y: cy + Math.sin(a1)*ir};
+          const q0 = {x: cx + Math.cos(a0)*or, y: cy + Math.sin(a0)*or};
+          const q1 = {x: cx + Math.cos(a1)*or, y: cy + Math.sin(a1)*or};
+
+          const grad = ctx.createLinearGradient(p0.x,p0.y,q0.x,q0.y);
+          grad.addColorStop(0, hexToRgba(col, 0.12 + 0.28*i));
+          grad.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle=grad;
+
+          ctx.beginPath();
+          ctx.moveTo(p0.x,p0.y);
+          ctx.lineTo(p1.x,p1.y);
+          ctx.lineTo(q1.x,q1.y);
+          ctx.lineTo(q0.x,q0.y);
+          ctx.closePath();
+          ctx.fill();
+        }
+
+        ctx.fillStyle = hexToRgba(col, 0.10 + 0.38*i);
+        ctx.beginPath();
+        ctx.arc(cx,cy,r*0.18,0,Math.PI*2);
+        ctx.fill();
+        ctx.strokeStyle = hexToRgba('#ffffff', 0.06);
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(cx,cy,r*0.18,0,Math.PI*2);
+        ctx.stroke();
+
+        ctx.restore();
+      }
+
+      track(){
+        const {ctx,v}=this;
+        const poly=v.trackPoly(16);
+        ctx.save();
+
+        // semi-transparent highway body
+        ctx.beginPath();
+        ctx.moveTo(poly.top.x0, poly.top.y);
+        ctx.lineTo(poly.top.x1, poly.top.y);
+        ctx.lineTo(poly.bot.x1, poly.bot.y);
+        ctx.lineTo(poly.bot.x0, poly.bot.y);
+        ctx.closePath();
+
+        const grad=ctx.createLinearGradient(0,poly.top.y,0,poly.bot.y);
+        grad.addColorStop(0,'rgba(255,255,255,0.018)');
+        grad.addColorStop(1,'rgba(255,255,255,0.008)');
+        ctx.fillStyle=grad;
+        ctx.fill();
+
+        ctx.strokeStyle='rgba(255,255,255,0.05)';
+        ctx.lineWidth=1;
+        ctx.stroke();
+
+        ctx.restore();
+      }
+
+      laneBg(i){
+        const {ctx,v}=this;
+        const topY = v.highwayTopY();
+        const bottomY = v.highwayBottomY();
+
+        const xTL = v.leftAtY(topY) + i * v.laneWAtY(topY);
+        const xTR = xTL + v.laneWAtY(topY);
+        const xBL = v.leftAtY(bottomY) + i * v.laneWAtY(bottomY);
+        const xBR = xBL + v.laneWAtY(bottomY);
+
+        const laneCenterX = (xTL + xTR + xBL + xBR) / 4;
+        const laneCenterY = (topY + bottomY) / 2;
+        const r = Math.max(120, (v.laneWAtY(bottomY)*1.2));
+        const g = ctx.createRadialGradient(laneCenterX, laneCenterY, 0, laneCenterX, laneCenterY, r);
+        g.addColorStop(0, 'rgba(255,255,255,0.012)');
+        g.addColorStop(0.55, 'rgba(255,255,255,0.007)');
+        g.addColorStop(1, 'rgba(255,255,255,0.003)');
+
+        ctx.save();
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.moveTo(xTL, topY);
+        ctx.lineTo(xTR, topY);
+        ctx.lineTo(xBR, bottomY);
+        ctx.lineTo(xBL, bottomY);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+
+      fretLines(game){
+        const {ctx,v}=this;
+        const bl = game.beatLines;
+        if(!bl || !bl.length) return;
+
+        const topY=v.highwayTopY();
+        const bottomY=v.highwayBottomY();
+        const minY=v.track.y-40, maxY=v.track.y+v.track.h+40;
+
+        ctx.save();
+        for(const l of bl){
+          const y = game.timeY(l.time);
+          if(y < minY || y > maxY) continue;
+
+          const yy = Math.max(topY, Math.min(bottomY, y));
+          const left = v.leftAtY(yy);
+          const right = left + v.widthAtY(yy);
+
+          ctx.strokeStyle = l.bar ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.10)';
+          ctx.lineWidth = l.bar ? 2.2 : 1.0;
+          const yPix = Math.round(y) + 0.5;
+          ctx.beginPath();
+          ctx.moveTo(left, yPix);
+          ctx.lineTo(right, yPix);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      walls(game){
+        const {ctx,v}=this;
+        const walls = game.chartWalls || [];
+        const start = game._wallFrom || 0;
+        const end = game._wallTo || 0;
+        if(!walls.length || start>=end) return;
+
+        const topY=v.highwayTopY();
+        const bottomY=v.highwayBottomY();
+        const minY=v.track.y-80, maxY=v.track.y+v.track.h+80;
+
+        for(let idx=start; idx<end; idx++){
+          const w = walls[idx];
+          if(!w) continue;
+          const yA = game.timeY(w.time);
+          const yB = game.timeY(w.end);
+          let yTop = Math.min(yA,yB);
+          let yBot = Math.max(yA,yB);
+          if(yBot < minY || yTop > maxY) continue;
+
+          yTop = Math.max(topY-60, yTop);
+          yBot = Math.min(bottomY+60, yBot);
+
+          const lane0 = Math.max(0, Math.min(CONFIG.LANES-1, (w.lane|0)));
+          const laneW = Math.max(1, Math.min(CONFIG.LANES - lane0, (w.width|0)));
+
+          const xTL = v.leftAtY(yTop) + lane0 * v.laneWAtY(yTop);
+          const xTR = xTL + laneW * v.laneWAtY(yTop);
+          const xBL = v.leftAtY(yBot) + lane0 * v.laneWAtY(yBot);
+          const xBR = xBL + laneW * v.laneWAtY(yBot);
+
+          const baseCol = w.color || '#ff3b3b';
+          const alpha = Number.isFinite(Number(w.alpha)) ? clamp01(Number(w.alpha)) : 1;
+
+          ctx.save();
+          ctx.globalCompositeOperation='source-over';
+
+          ctx.fillStyle = hexToRgba(baseCol, 0.22 + 0.30*alpha);
+          ctx.beginPath();
+          ctx.moveTo(xTL,yTop);
+          ctx.lineTo(xTR,yTop);
+          ctx.lineTo(xBR,yBot);
+          ctx.lineTo(xBL,yBot);
+          ctx.closePath();
+          ctx.fill();
+
+          ctx.strokeStyle = hexToRgba(baseCol, 0.50 + 0.35*alpha);
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+
+          ctx.restore();
+        }
+      }
+
+      laneBombs(i,game){
+        const {ctx,v}=this;
+
+        const topY=v.highwayTopY();
+        const bottomY=v.highwayBottomY();
+
+        const bombs = game.chartBombs || [];
+        const bStart = game._bombFrom || 0;
+        const bEnd = game._bombTo || 0;
+        if(!bombs.length || bStart>=bEnd) return;
+
+        const notes = game.chartNotes || [];
+        const nStart = game.renderFrom || 0;
+        const nEnd = game.renderTo || 0;
+
+        const occ = noteBucketsForLane(notes, nStart, nEnd, i);
+
+        const minY=v.track.y-40, maxY=v.track.y+v.track.h+40;
+
+        for(let idx=bStart; idx<bEnd; idx++){
+          const b = bombs[idx];
+          if(!b || b.lane!==i) continue;
+          if(occ.has(timeBucket(b.time))) continue; // note overrides bomb
+
+          const y = game.timeY(b.time);
+          if(y<minY||y>maxY) continue;
+
+          const yClamped = Math.max(topY, Math.min(bottomY, y));
+          const u = v.highwayU(yClamped);
+
+          const laneW = v.laneWAtY(y);
+          const noteW = laneW * 0.78;
+          const noteH = 16 + (26-16)*u;
+
+          // Bomb is a smaller black "note pill" with spikes
+          const bombW = noteW * 0.78;
+          const bombH = noteH * 0.82;
+
+          const cx = v.laneCenterAtY(i, y);
+          const x0 = cx - bombW/2;
+          const y0 = y - bombH/2;
+          const r = bombH/2;
+
+          ctx.save();
+
+          // spikes
+          ctx.fillStyle = 'rgba(0,0,0,0.98)';
+          const spikeLen = Math.max(6, bombH*0.55);
+          const spikeW = Math.max(3, bombH*0.30);
+          const spanX0 = x0 + r*0.85;
+          const spanX1 = x0 + bombW - r*0.85;
+          const count = 5;
+          for(let s=0;s<count;s++){
+            const uu = (s+0.5)/count;
+            const xx = spanX0 + uu*(spanX1-spanX0);
+            // top
+            ctx.beginPath();
+            ctx.moveTo(xx-spikeW/2, y0+1);
+            ctx.lineTo(xx+spikeW/2, y0+1);
+            ctx.lineTo(xx, y0-spikeLen);
+            ctx.closePath();
+            ctx.fill();
+            // bottom
+            ctx.beginPath();
+            ctx.moveTo(xx-spikeW/2, y0+bombH-1);
+            ctx.lineTo(xx+spikeW/2, y0+bombH-1);
+            ctx.lineTo(xx, y0+bombH+spikeLen);
+            ctx.closePath();
+            ctx.fill();
+          }
+
+          const sideCount = 2;
+          const spanY0 = y0 + r*0.75;
+          const spanY1 = y0 + bombH - r*0.75;
+          const sideLen = Math.max(6, bombH*0.45);
+          const sideW = Math.max(3, bombH*0.26);
+          for(let s=0;s<sideCount;s++){
+            const uu = (s+0.5)/sideCount;
+            const yy = spanY0 + uu*(spanY1-spanY0);
+            // left
+            ctx.beginPath();
+            ctx.moveTo(x0+1, yy-sideW/2);
+            ctx.lineTo(x0+1, yy+sideW/2);
+            ctx.lineTo(x0-sideLen, yy);
+            ctx.closePath();
+            ctx.fill();
+            // right
+            ctx.beginPath();
+            ctx.moveTo(x0+bombW-1, yy-sideW/2);
+            ctx.lineTo(x0+bombW-1, yy+sideW/2);
+            ctx.lineTo(x0+bombW+sideLen, yy);
+            ctx.closePath();
+            ctx.fill();
+          }
+
+          // pill base
+          roundedRect(ctx, x0, y0, bombW, bombH, r);
+          ctx.fillStyle = 'rgba(6,7,10,0.98)';
+          ctx.fill();
+
+          // subtle sheen
+          const lg = ctx.createLinearGradient(0, y0, 0, y0+bombH);
+          lg.addColorStop(0, 'rgba(255,255,255,0.07)');
+          lg.addColorStop(0.45, 'rgba(255,255,255,0.02)');
+          lg.addColorStop(1, 'rgba(0,0,0,0.22)');
+          roundedRect(ctx, x0, y0, bombW, bombH, r);
+          ctx.fillStyle = lg;
+          ctx.fill();
+
+          // outline
+          ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+          ctx.lineWidth = 1.1;
+          roundedRect(ctx, x0, y0, bombW, bombH, r);
+          ctx.stroke();
+
+          // tiny highlight band
+          ctx.globalAlpha = 0.08;
+          roundedRect(ctx, x0+1, y0+1, bombW-2, bombH*0.40, r);
+          ctx.fillStyle = '#fff';
+          ctx.fill();
+
+          ctx.restore();
+        }
+      }
+
+      laneNotes(i,game){
+        const {ctx,v}=this;
+
+        const topY=v.highwayTopY();
+        const bottomY=v.highwayBottomY();
+
+        const arr = game.chartNotes;
+        const start = game.renderFrom;
+        const end = game.renderTo;
+
+        const minY=v.track.y-40, maxY=v.track.y+v.track.h+40;
+
+        for(let idx=start; idx<end; idx++){
+          const n = arr[idx];
+          if(n.lane!==i || n.hit || n.missed) continue;
+          const y=game.noteY(n);
+          if(y<minY||y>maxY) continue;
+
+          const u = v.highwayU(Math.max(topY, Math.min(bottomY, y)));
+
+          const laneW = v.laneWAtY(y);
+          const noteW = laneW * 0.78;
+          const noteH = 16 + (26-16)*u;
+
+          const cx = v.laneCenterAtY(i, y);
+          const x0 = cx - noteW/2;
+          const y0 = y - noteH/2;
+
+          const dist=Math.abs(y - v.hitLineY);
+          const glow=Math.max(0, 1 - dist/(game.hitWindowPx*2));
+
+          // Solid pill note
+          ctx.save();
+
+          roundedRect(ctx, x0, y0, noteW, noteH, noteH/2);
+          ctx.fillStyle = hexToRgba(CONFIG.COLORS[i], 1.0);
+          ctx.fill();
+
+          // subtle sheen
+          const lg = ctx.createLinearGradient(0, y0, 0, y0+noteH);
+          lg.addColorStop(0, 'rgba(255,255,255,0.10)');
+          lg.addColorStop(0.55, 'rgba(255,255,255,0.03)');
+          lg.addColorStop(1, 'rgba(0,0,0,0.10)');
+          roundedRect(ctx, x0, y0, noteW, noteH, noteH/2);
+          ctx.fillStyle = lg;
+          ctx.fill();
+
+          if(glow > 0.01){
+            ctx.save();
+            ctx.globalCompositeOperation='lighter';
+            const rg = ctx.createRadialGradient(cx, y, noteW*0.10, cx, y, noteW*0.85);
+            rg.addColorStop(0, hexToRgba('#ffffff', 0.06 + 0.10*glow));
+            rg.addColorStop(0.35, hexToRgba(CONFIG.COLORS[i], 0.10 + 0.25*glow));
+            rg.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = rg;
+            ctx.fillRect(x0-noteW*0.4, y0-noteH*0.8, noteW*1.8, noteH*2.6);
+            ctx.restore();
+          }
+
+          ctx.strokeStyle=OUTLINE;
+          ctx.lineWidth=1.2;
+          roundedRect(ctx, x0, y0, noteW, noteH, noteH/2);
+          ctx.stroke();
+
+          // small glossy band
+          ctx.globalAlpha=0.08 + 0.18*glow;
+          roundedRect(ctx, x0+1, y0+1, noteW-2, noteH*0.42, noteH/2);
+          ctx.fillStyle='#fff';
+          ctx.fill();
+
+          ctx.restore();
+        }
+
+        // Hit flashes
+        for(let k=0;k<game.fCount;k++){
+          const f=game.flashes[k];
+          if(f.lane!==i) continue;
+          const a=1-(f.t/f.life);
+          const col=f.type==='perfect'? CONFIG.COLORS[i] : '#ff6b6b';
+
+          const yMid = v.hitLineY;
+          const laneW = v.laneWAtY(yMid);
+          const cx = v.laneCenterAtY(i, yMid);
+          const x0 = cx - laneW*0.48;
+          const x1 = cx + laneW*0.48;
+          const y0 = yMid - 26;
+          const y1 = yMid + 26;
+
+          ctx.save();
+          ctx.globalAlpha=0.28*a;
+          ctx.fillStyle=col;
+          roundedRect(ctx, x0, y0, x1-x0, y1-y0, 12);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+
+      pad(i,game){
+        const {ctx,v}=this;
+        const pr=v.lanePads[i];
+        const pressed=performance.now() - game.lanePressed[i] < 120;
+        const base=pressed? shade(CONFIG.COLORS[i],-25) : CONFIG.COLORS[i];
+        const x=pr.x, y=pr.y, w=pr.w, h=pr.h;
+        roundedRect(ctx,x,y,w,h,16);
+        ctx.fillStyle=hexToRgba(base,0.95);
+        ctx.fill();
+        const g=ctx.createLinearGradient(0,y,0,y+h);
+        g.addColorStop(0,'rgba(255,255,255,0.24)');
+        g.addColorStop(0.4,'rgba(255,255,255,0.06)');
+        g.addColorStop(1,'rgba(0,0,0,0.20)');
+        roundedRect(ctx,x,y,w,h,16);
+        ctx.fillStyle=g;
+        ctx.fill();
+        ctx.fillStyle='rgba(14, 18, 32, 0.75)';
+        ctx.font='bold 18px system-ui, -apple-system, Segoe UI, Roboto';
+        ctx.textAlign='center';
+        ctx.textBaseline='middle';
+        const labels=['D','F','J','K'];
+        ctx.fillText(labels[i], x+w/2, y+h/2);
+        ctx.strokeStyle='rgba(0,0,0,0.45)';
+        ctx.lineWidth=1.5;
+        roundedRect(ctx,x,y,w,h,16);
+        ctx.stroke();
+      }
+
+      banner(text,alpha=0.92){
+        const {ctx,v}=this;
+        const w=Math.min(650, v.w-60);
+        ctx.save();
+        ctx.globalAlpha=alpha;
+        roundedRect(ctx,(v.w-w)/2, v.h*0.35, w, 86, 14);
+        ctx.fillStyle='rgba(0,0,0,0.78)';
+        ctx.fill();
+        ctx.strokeStyle='rgba(255,255,255,0.06)';
+        ctx.lineWidth=1;
+        ctx.stroke();
+        ctx.fillStyle=WHITE;
+        ctx.font='600 20px system-ui, -apple-system, Segoe UI, Roboto';
+        ctx.textAlign='center';
+        ctx.textBaseline='middle';
+        ctx.fillText(text, v.w/2, v.h*0.35+43);
+        ctx.restore();
+      }
+    }
+
+    // =========================
+    // HUD
+    // =========================
+    class HUD{
+      constructor(){
+        this.score=document.getElementById('scoreVal');
+        this.streak=document.getElementById('streakVal');
+        this.acc=document.getElementById('accVal');
+        this.time=document.getElementById('timeVal');
+      }
+      update(g){
+        this.score.textContent=g.score|0;
+        this.streak.textContent=g.streak|0;
+        const acc=g.totalTries? (100*g.totalHits/g.totalTries):100;
+        this.acc.textContent=`${acc.toFixed(0)}%`;
+        this.time.textContent=`${g.elapsed.toFixed(1)}s`;
+      }
+    }
+
+    const MAX_PARTICLES = 600;
+    const MAX_FLASHES = 24;
+
+    // =========================
+    // Game core
+    // =========================
+    class Game{
+      constructor(view,renderer, opts={}){
+        this.view=view;
+        this.renderer=renderer;
+        this.hud=new HUD();
+
+        this.loaded=false;
+        this.running=false;
+        this.paused=false;
+        this.ended=false;
+
+        this.elapsed=0;
+        this.raf=0;
+
+        this.speedPx=360;
+        this.hitWindowPx=CONFIG.HIT_WINDOW_PX;
+        this.hitWindowSec=this.hitWindowPx/this.speedPx;
+
+        this.score=0;
+        this.streak=0;
+        this.totalHits=0;
+        this.totalTries=0;
+        this.maxStreak=0;
+
+        this.chartNotes=[];
+        this.chartBombs=[];
+        this.chartWalls=[];
+
+        this.flashes=new Array(MAX_FLASHES);
+        this.fCount=0;
+        this.particles=new Array(MAX_PARTICLES);
+        this.pCount=0;
+
+        this.lanePressed=Array(CONFIG.LANES).fill(0);
+
+        this.lightEvents=[];
+        this.lightIdx=0;
+        this.hasLightEvents=false;
+
+        this.fixture = {
+          backWash: { state:'OFF', intensity:0, color:null },
+          ring:     { state:'OFF', intensity:0, color:null, angle:0, angVel:0, angVelTarget:0 },
+          laserL:   { state:'OFF', intensity:0, color:null, angle:0, angVel:0, angVelTarget:0 },
+          laserR:   { state:'OFF', intensity:0, color:null, angle:0, angVel:0, angVelTarget:0 },
+          center:   { state:'OFF', intensity:0, color:null, angle:0, angVel:0, angVelTarget:0 },
+        };
+
+        // Lighting behavior config
+        this.lightMode = LIGHTING_DEFAULTS.mode;
+        this.pulseDecayMs = LIGHTING_DEFAULTS.pulseDecayMs;
+        this.ambientWhenNoEvents = LIGHTING_DEFAULTS.ambientWhenNoEvents;
+        this.ambientWhenEvents = LIGHTING_DEFAULTS.ambientWhenEvents;
+
+        this._lightDecay = {
+          backWash: { lastEventAt:-Infinity, startAt:-Infinity, from:0, target:0, duration:0 },
+          ring:     { lastEventAt:-Infinity, startAt:-Infinity, from:0, target:0, duration:0 },
+          laserL:   { lastEventAt:-Infinity, startAt:-Infinity, from:0, target:0, duration:0 },
+          laserR:   { lastEventAt:-Infinity, startAt:-Infinity, from:0, target:0, duration:0 },
+          center:   { lastEventAt:-Infinity, startAt:-Infinity, from:0, target:0, duration:0 },
+        };
+
+        this.spinSlewRate=7.0;
+        this.spinFriction=0.85;
+
+        this._beatIdx=0;
+        this._scanIdx=0;
+        this._activeFrom=0;
+        this._activeTo=0;
+        this.renderFrom=0;
+        this.renderTo=0;
+
+        this._bombFrom=0;
+        this._bombTo=0;
+
+        this._wallFrom=0;
+        this._wallTo=0;
+
+        this.duration=0;
+        this._inputsBound = false;
+        if(!(opts && opts.bindInputs === false)){
+          this.bindInputs();
+          this._inputsBound = true;
+        }
+      }
+
+      setSpeed(px){
+        this.speedPx = Number(px) || this.speedPx;
+        this.hitWindowSec = this.hitWindowPx / Math.max(1, this.speedPx);
+      }
+
+      setFromNJS(njs){
+        const px = njsToPxPerSec(njs);
+        this.setSpeed(px);
+        const speedReadout = document.getElementById('speedReadout');
+        if(speedReadout) speedReadout.textContent = `${Math.round(this.speedPx)} px/s (NJS ${Number(njs).toFixed(1)})`;
+      }
+
+      loadChartAndSong(chart, songDuration){
+        this.loaded=true;
+        this.chart=chart;
+        this.beatLines = Array.isArray(chart.beatLines) ? chart.beatLines : [];
+        this.bpm = Number(chart.bpm) || 0;
+        this.duration=Math.max(Number(songDuration)||0, Number(chart.duration)||0);
+
+        this.chartNotes = Array.isArray(chart.notes) ? chart.notes : [];
+        this.chartBombs = Array.isArray(chart.bombs) ? chart.bombs : [];
+        this._bombFrom = 0;
+        this._bombTo = 0;
+
+        this.chartWalls = Array.isArray(chart.walls) ? chart.walls : [];
+        this._wallFrom = 0;
+        this._wallTo = 0;
+
+        this._beatIdx = 0;
+        this._scanIdx = 0;
+        this._activeFrom = 0;
+        this._activeTo = 0;
+
+        this.elapsed=0; this.score=0; this.streak=0; this.totalHits=0; this.totalTries=0; this.maxStreak=0;
+        this.fCount=0; this.pCount=0;
+        this.ended=false; this.running=false; this.paused=false;
+
+        this.setLightEvents(chart.lightEvents || []);
+
+        this.renderer.draw(this);
+        this.hud.update(this);
+      }
+
+      resetFixtures(){
+        this.fixture.backWash.state='OFF'; this.fixture.backWash.intensity=0; this.fixture.backWash.color=null;
+        for(const key of ['ring','laserL','laserR','center']){
+          const fx=this.fixture[key];
+          fx.state='OFF'; fx.intensity=0; fx.color=null; fx.angle=0; fx.angVel=0; fx.angVelTarget=0;
+        }
+        for(const k of Object.keys(this._lightDecay)){
+          this._lightDecay[k].lastEventAt = -Infinity;
+          this._lightDecay[k].startAt = -Infinity;
+          this._lightDecay[k].from = 0;
+          this._lightDecay[k].target = 0;
+          this._lightDecay[k].duration = 0;
+        }
+      }
+
+      setLightEvents(events){
+        this.lightEvents = Array.isArray(events) ? events : [];
+        this.lightIdx = 0;
+        this.hasLightEvents = this.lightEvents.length > 0;
+        this.resetFixtures();
+      }
+
+      applyLightEvent(ev){
+        const f = this.fixture;
+        if(!ev || !ev.fixture) return;
+        if(ev.kind==='light'){
+          const tgt = f[ev.fixture];
+          if(!tgt) return;
+
+          const now = AudioEngine.nowSong();
+          const state = ev.state || 'OFF';
+          const alpha = Number.isFinite(Number(ev.alpha)) ? clamp01(ev.alpha) : 1;
+          const nextIntensity = clamp01(ev.intensity) * alpha;
+
+          tgt.state = state;
+          tgt.color = ev.color || null;
+          tgt.intensity = (state === 'OFF') ? 0 : nextIntensity;
+
+          const d = (this._lightDecay && this._lightDecay[ev.fixture]);
+          if(d){ d.lastEventAt = now; }
+
+          if(this.lightMode === 'pulseDecay' && state !== 'OFF' && nextIntensity > 0.0001){
+            if(d){
+              d.startAt = now;
+              d.from = nextIntensity;
+              d.target = 0;
+              d.duration = Math.max(1, Number(this.pulseDecayMs) || 300) / 1000;
+            }
+          }
+
+          if(state === 'OFF' && d){
+            d.startAt = -Infinity;
+            d.from = 0;
+            d.target = 0;
+            d.duration = 0;
+          }
+          return;
+        }
+        if(ev.kind==='spin'){
+          const tgt = f[ev.fixture];
+          if(tgt && 'angVelTarget' in tgt){
+            tgt.angVelTarget = Number.isFinite(Number(ev.speed)) ? Number(ev.speed) : 0;
+          }
+        }
+      }
+
+      updateLightShow(dtSec){
+        const now = AudioEngine.nowSong();
+        const evs = this.lightEvents;
+
+        while(this.lightIdx < evs.length && evs[this.lightIdx].time <= now){
+          this.applyLightEvent(evs[this.lightIdx]);
+          this.lightIdx++;
+        }
+
+        const mode = this.lightMode || 'pulseDecay';
+
+        if(mode === 'pulseDecay'){
+          const decayMs = Math.max(1, Number(this.pulseDecayMs) || 300);
+          const D = decayMs / 1000;
+          const smooth = (u)=> u*u*(3-2*u); // smoothstep
+
+          for(const key of Object.keys(this.fixture)){
+            const fx = this.fixture[key];
+            if(!fx || !('intensity' in fx)) continue;
+
+            if(fx.state === 'OFF'){
+              fx.intensity = 0;
+              if('color' in fx) fx.color = null;
+              const d0 = (this._lightDecay && this._lightDecay[key]);
+              if(d0) d0.startAt = -Infinity;
+              continue;
+            }
+
+            const d = (this._lightDecay && this._lightDecay[key]);
+            if(d && Number.isFinite(d.startAt) && d.startAt > -1e50 && (d.duration || D) > 0){
+              const dur = Math.max(0.001, d.duration || D);
+              const u = Math.min(1, Math.max(0, (now - d.startAt) / dur));
+              const eased = smooth(u);
+              fx.intensity = (1 - eased) * clamp01(d.from);
+
+              if(u >= 1){
+                fx.state = 'OFF';
+                fx.intensity = 0;
+                fx.color = null;
+                d.startAt = -Infinity;
+                d.from = 0;
+                d.target = 0;
+                d.duration = 0;
+              }
+            } else {
+              fx.intensity = clamp01(fx.intensity);
+            }
+          }
+        } else {
+          for(const key of Object.keys(this.fixture)){
+            const fx = this.fixture[key];
+            if(!fx || !('intensity' in fx)) continue;
+            if(fx.state === 'OFF'){
+              fx.intensity = 0;
+              if('color' in fx) fx.color = null;
+            } else {
+              fx.intensity = clamp01(fx.intensity);
+            }
+          }
+        }
+
+        // Spin smoothing
+        const s = Math.max(0.01, Number(this.spinSlewRate) || 1);
+        const a = 1 - Math.exp(-s * Math.max(0, dtSec));
+        const fr = clamp01(Number(this.spinFriction) || 0.85);
+
+        for(const key of ['laserL','laserR','center','ring']){
+          const fx = this.fixture[key];
+          const target = Number(fx.angVelTarget) || 0;
+          fx.angVel = (Number(fx.angVel)||0) + (target - (Number(fx.angVel)||0)) * a;
+          fx.angle = (Number(fx.angle)||0) + fx.angVel * dtSec;
+          fx.angVelTarget *= fr;
+          if(fx.angle > Math.PI*4 || fx.angle < -Math.PI*4) fx.angle = fx.angle % (Math.PI*2);
+        }
+      }
+
+      timeY(time){
+        const t = AudioEngine.nowSong();
+        return this.view.hitLineY - (Number(time) - t) * this.speedPx;
+      }
+
+      noteY(n){ return this.timeY(n.time); }
+
+      async start(){
+        if(!this.loaded || !this.chartNotes.length) return;
+        this.hideWin();
+        this.running=true; this.paused=false; this.ended=false;
+        await AudioEngine.resume();
+        AudioEngine.start(0);
+        cancelAnimationFrame(this.raf);
+        this.loop();
+      }
+
+      async togglePause(){
+        if(!this.running || this.ended) return;
+        this.paused=!this.paused;
+        if(!this.paused){
+          await AudioEngine.resume();
+          AudioEngine.start(this.elapsed);
+        } else {
+          this.elapsed=AudioEngine.nowSong();
+          AudioEngine.stop();
+          await AudioEngine.suspend();
+        }
+      }
+
+      async restart(){
+        if(!this.loaded) return;
+        this.hideWin();
+        for(const n of this.chartNotes){ n.hit=false; n.missed=false; }
+        this.elapsed=0; this.score=0; this.streak=0; this.totalHits=0; this.totalTries=0; this.maxStreak=0;
+        this.fCount=0; this.pCount=0; this.ended=false;
+        this._beatIdx = 0;
+        this._scanIdx = 0;
+        this._activeFrom = 0;
+        this._activeTo = 0;
+        this._bombFrom = 0;
+        this._bombTo = 0;
+        this._wallFrom = 0;
+        this._wallTo = 0;
+        this.lightIdx = 0;
+        this.resetFixtures();
+        await this.start();
+      }
+
+      hitX(lane){
+        // particles are rendered unwarped
+        return this.view.track.x + lane*(this.view.track.laneW + this.view.track.gap) + this.view.track.laneW/2;
+      }
+
+      spark(x,y,color){
+        for(let i=0;i<14;i++){
+          const idx = (this.pCount < MAX_PARTICLES) ? this.pCount++ : (i % MAX_PARTICLES);
+          const a=Math.random()*Math.PI - Math.PI/2;
+          const s=90+Math.random()*160;
+          this.particles[idx] = {
+            x, y,
+            vx:Math.cos(a)*s,
+            vy:Math.sin(a)*s-30,
+            life:420+Math.random()*300,
+            t:0,
+            color,
+          };
+        }
+      }
+
+      flash(lane,type){
+        const idx = (this.fCount < MAX_FLASHES) ? this.fCount++ : 0;
+        this.flashes[idx] = { lane, type, t:0, life:220 };
+      }
+
+      showWin(){
+        const totalNotes=this.chartNotes.length;
+        let hits=0;
+        for(const n of this.chartNotes) if(n.hit) hits++;
+        const acc=totalNotes ? Math.round((hits/totalNotes)*100) : 100;
+        winScore.textContent=String(this.score);
+        winAcc.textContent=acc + '%';
+        winStreak.textContent=String(this.maxStreak || 0);
+        winHits.textContent=`${hits}/${totalNotes}`;
+        win.style.display='grid';
+        AudioEngine.stop();
+        AudioEngine.suspend();
+      }
+
+      hideWin(){ win.style.display='none'; }
+
+      onEnd(){
+        if(this.ended) return;
+        this.running=false;
+        this.ended=true;
+        this.showWin();
+      }
+
+      updateActiveWindow(t){
+        const arr=this.chartNotes;
+        const n=arr.length;
+
+        const pre = 1.5;
+        const post = 0.8;
+        const fromT = t - post;
+        const toT = t + pre;
+
+        if(!n){
+          this.renderFrom=this.renderTo=this._activeFrom=this._activeTo=0;
+        } else {
+          while(this._activeFrom < n && arr[this._activeFrom].time < fromT) this._activeFrom++;
+          if(this._activeTo < this._activeFrom) this._activeTo = this._activeFrom;
+          while(this._activeTo < n && arr[this._activeTo].time <= toT) this._activeTo++;
+
+          this.renderFrom = this._activeFrom;
+          this.renderTo = this._activeTo;
+        }
+
+        const bArr=this.chartBombs;
+        const bn=bArr.length;
+        if(!bn){
+          this._bombFrom=this._bombTo=0;
+        } else {
+          while(this._bombFrom < bn && bArr[this._bombFrom].time < fromT) this._bombFrom++;
+          if(this._bombTo < this._bombFrom) this._bombTo = this._bombFrom;
+          while(this._bombTo < bn && bArr[this._bombTo].time <= toT) this._bombTo++;
+        }
+
+        const wArr=this.chartWalls;
+        const wn=wArr.length;
+        if(!wn){
+          this._wallFrom=this._wallTo=0;
+        } else {
+          while(this._wallFrom < wn && (wArr[this._wallFrom].end || wArr[this._wallFrom].time) < fromT) this._wallFrom++;
+          if(this._wallTo < this._wallFrom) this._wallTo = this._wallFrom;
+          while(this._wallTo < wn && wArr[this._wallTo].time <= toT) this._wallTo++;
+        }
+      }
+
+      tryHit(lane){
+        if(!this.running || this.paused) return;
+        this.totalTries++;
+        const t=AudioEngine.nowSong();
+
+        this.updateActiveWindow(t);
+        const arr=this.chartNotes;
+        let bestIdx=-1, bestDist=Infinity;
+        for(let i=this.renderFrom;i<this.renderTo;i++){
+          const n=arr[i];
+          if(n.lane!==lane || n.hit || n.missed) continue;
+          const dt=Math.abs(n.time - t);
+          if(dt<bestDist){ bestDist=dt; bestIdx=i; }
+        }
+
+        if(bestIdx>=0 && bestDist<=this.hitWindowSec){
+          const note=arr[bestIdx];
+          note.hit=true;
+          this.streak++;
+          this.maxStreak=Math.max(this.maxStreak, this.streak);
+          this.totalHits++;
+          const k=Math.min(4, Math.floor(this.streak/10)+1);
+          this.score += 50*k;
+          this.flash(lane,'perfect');
+          this.spark(this.hitX(lane), this.view.hitLineY-6, CONFIG.COLORS[lane]);
+          AudioEngine.playTick();
+        } else {
+          this.streak=0;
+          this.flash(lane,'miss');
+        }
+
+        this.hud.update(this);
+      }
+
+      loop(){
+        const step=()=>{
+          if(this.running && !this.paused){
+            const t=AudioEngine.nowSong();
+            const prev=this.elapsed;
+            this.elapsed=t;
+            const dtSec = Math.max(0, (t - prev));
+
+            this.updateLightShow(dtSec);
+            this.updateActiveWindow(t);
+
+            const arr=this.chartNotes;
+            while(this._scanIdx < arr.length){
+              const n = arr[this._scanIdx];
+              if(n.hit || n.missed){ this._scanIdx++; continue; }
+              if(t > n.time + this.hitWindowSec){
+                n.missed=true;
+                this.streak=0;
+                this._scanIdx++;
+                continue;
+              }
+              break;
+            }
+
+            const dt=16;
+
+            let nf=0;
+            for(let i=0;i<this.fCount;i++){
+              const f=this.flashes[i];
+              f.t+=dt;
+              if(f.t<=f.life) this.flashes[nf++]=f;
+            }
+            this.fCount=nf;
+
+            let np=0;
+            const g = 600*(dt/1000);
+            const stepT = (dt/1000);
+            for(let i=0;i<this.pCount;i++){
+              const p=this.particles[i];
+              p.t+=dt;
+              p.vy += g;
+              p.x += p.vx*stepT;
+              p.y += p.vy*stepT;
+              if(p.t<=p.life) this.particles[np++]=p;
+            }
+            this.pCount=np;
+
+            this.hud.update(this);
+
+            if(this._scanIdx >= arr.length || t >= this.duration + 0.15){
+              this.onEnd();
+            }
+          }
+
+          this.renderer.draw(this, this.paused);
+          if(this.running || !this.ended) this.raf=requestAnimationFrame(step);
+        };
+
+        this.raf=requestAnimationFrame(step);
+      }
+
+      bindInputs(){
+        const canvas=document.getElementById('game');
+        canvas.addEventListener('mousedown',e=>this.onPointer(e));
+        canvas.addEventListener('touchstart',e=>{e.preventDefault(); for(const t of e.changedTouches) this.onPointer(t);},{passive:false});
+
+        const KEY_TO_LANE={ d:0, f:1, j:2, k:3 };
+        window.addEventListener('keydown',(e)=>{
+          const k=e.key.toLowerCase();
+          if(k===' '||k==='enter'){
+            e.preventDefault();
+            if(!this.running || this.ended) this.start();
+            return;
+          }
+          if(k==='p'){ this.togglePause(); return; }
+          if(k==='r'){ this.restart(); return; }
+          if(!this.running || this.paused) return;
+          const lane = KEY_TO_LANE[k];
+          if(lane!==undefined){
+            this.lanePressed[lane]=performance.now();
+            this.tryHit(lane);
+          }
+        });
+
+        document.getElementById('startBtn').onclick=()=>this.start();
+        document.getElementById('pauseBtn').onclick=()=>this.togglePause();
+        document.getElementById('restartBtn').onclick=()=>this.restart();
+
+        const musicVol=document.getElementById('musicVol');
+        const musicVolVal=document.getElementById('musicVolVal');
+        musicVol.oninput=()=>{
+          AudioEngine.setVolume(parseFloat(musicVol.value));
+          musicVolVal.textContent=`${Math.round(parseFloat(musicVol.value)*100)}%`;
+        };
+      }
+
+      onPointer(e){
+        if(!this.running || this.paused) return;
+        const rect=this.view.canvas.getBoundingClientRect();
+        const x=e.clientX-rect.left;
+        const y=e.clientY-rect.top;
+        for(const pr of this.view.lanePads){
+          if(pointInRect(x,y,pr)){
+            this.lanePressed[pr.lane]=performance.now();
+            this.tryHit(pr.lane);
+            return;
+          }
+        }
+      }
+    }
+
+    // =========================
+    // Load from ZIP
+    // =========================
+    let __coverObjectUrl = null;
+
+    async function loadFromZipFile(file, selectedDifficultyName=null){
+      const zipBuf = await file.arrayBuffer();
+      const zip = await JSZip.loadAsync(zipBuf);
+
+      const infoFile = findFileCaseInsensitive(zip, ['Info.dat', 'info.dat']);
+      if(!infoFile) throw new Error('ZIP is missing Info.dat');
+      const info = JSON.parse(await infoFile.async('string'));
+
+      const songName = String(info._songName || info.songName || 'Unknown Song');
+      const songSub = String(info._songSubName || info.songSubName || '').trim();
+      const composer = String(info._songAuthorName || info.songAuthorName || '').trim();
+      const mapper = String(info._levelAuthorName || info.levelAuthorName || '').trim();
+
+      const titleEl = document.getElementById('songTitle');
+      const compEl = document.getElementById('songComposer');
+      if(titleEl) titleEl.textContent = songSub ? `${songName} — ${songSub}` : songName;
+      if(compEl){
+        const line = [composer ? `Composer: ${composer}` : '', mapper ? `Mapper: ${mapper}` : ''].filter(Boolean).join(' · ');
+        compEl.textContent = line;
+        compEl.style.display = line ? 'block' : 'none';
+      }
+
+      const coverName = normPath(info._coverImageFilename || info.coverImageFilename || info._coverImage || info.coverImage || '');
+
+      function findByBasenameAnyExt(base){
+        if(!base) return null;
+        const b = base.toLowerCase().replace(/[.](png|jpg|jpeg|webp)$/i,'');
+        const keys = Object.keys(zip.files);
+        const exts = ['png','jpg','jpeg','webp'];
+        for(const ext of exts){
+          const suffix = `${b}.${ext}`;
+          for(const k of keys){
+            const low = normPath(k).toLowerCase();
+            if(low.endsWith(suffix)) return zip.file(k);
+          }
+        }
+        for(const k of keys){
+          const low = normPath(k).toLowerCase();
+          if(
+            low.endsWith('cover.png') || low.endsWith('cover.jpg') || low.endsWith('cover.jpeg') || low.endsWith('cover.webp') ||
+            low.endsWith('coverimage.png') || low.endsWith('coverimage.jpg') || low.endsWith('coverimage.jpeg') || low.endsWith('coverimage.webp')
+          ) return zip.file(k);
+        }
+        return null;
+      }
+
+      const coverFile = (function(){
+        if(coverName){
+          const base = coverName.split('/').pop() || '';
+          return zip.file(coverName)
+            || (base ? zip.file(base) : null)
+            || (base ? findByBasenameAnyExt(base) : null);
+        }
+        return findByBasenameAnyExt('cover');
+      })();
+
+      const coverEl = document.getElementById('songCover');
+      if(coverEl){
+        if(__coverObjectUrl){
+          URL.revokeObjectURL(__coverObjectUrl);
+          __coverObjectUrl = null;
+        }
+        if(coverFile){
+          const blob = await coverFile.async('blob');
+          __coverObjectUrl = URL.createObjectURL(blob);
+          coverEl.src = __coverObjectUrl;
+          coverEl.style.display = 'block';
+        } else {
+          coverEl.style.display = 'none';
+          coverEl.removeAttribute('src');
+        }
+      }
+
+      const bpm = toFiniteNumber(info._beatsPerMinute || info.beatsPerMinute);
+      if(!Number.isFinite(bpm) || bpm<=0) throw new Error('Info.dat missing BPM');
+
+      const diffs = pickStandardDifficulties(info);
+      if(!diffs.length) throw new Error('No Standard difficulties in this map.');
+      const chosen = chooseDifficultyByName(diffs, selectedDifficultyName) || diffs[diffs.length-1];
+
+      const beatmapPath = normPath(chosen.file);
+      const beatmapFile = zip.file(beatmapPath) || zip.file(beatmapPath.split('/').pop());
+      if(!beatmapFile) throw new Error('Beatmap file missing: ' + chosen.file);
+      const beatmapJson = JSON.parse(await beatmapFile.async('string'));
+
+      const offsetSec = toFiniteNumber(info._songTimeOffset || info.songTimeOffset || 0) || 0;
+      const chart = parseBeatmapTo4Lane(beatmapJson, bpm, offsetSec);
+      if(!chart.notes.length) throw new Error('Selected difficulty has no notes.');
+
+      const njs = readNJSForDifficulty(info, chosen)
+        || toFiniteNumber(beatmapJson._noteJumpMovementSpeed || beatmapJson.noteJumpMovementSpeed || beatmapJson._noteJumpSpeed || beatmapJson.noteJumpSpeed)
+        || 14;
+      game.setFromNJS(njs);
+
+      const songFilename = normPath(info._songFilename || info.songFilename);
+      if(!songFilename) throw new Error('Info.dat missing _songFilename');
+      const songFile = zip.file(songFilename) || zip.file(songFilename.split('/').pop());
+      if(!songFile) throw new Error('Song audio missing: ' + songFilename);
+
+      const songArrayBuf = await songFile.async('arraybuffer');
+      const ctx = AudioEngine.ensure();
+      const audioBuf = await ctx.decodeAudioData(songArrayBuf.slice(0));
+      await AudioEngine.setSongBuffer(audioBuf);
+
+      game.loadChartAndSong(chart, audioBuf.duration);
+      overlay.style.display='none';
+    }
+
+    // =========================
+    // Boot
+    // =========================
+    const canvasEl = document.getElementById('game');
+    const view = new View(canvasEl);
+    const renderer = new Renderer(view);
+    const game = new Game(view, renderer);
+    renderer.draw(game);
+
+    const overlay = document.getElementById('overlay');
+    const zipFile = document.getElementById('zipFile');
+    const diffSelect = document.getElementById('diffSelect');
+    const diffMeta = document.getElementById('diffMeta');
+    const zipMeta = document.getElementById('zipMeta');
+    const chooseZip = document.getElementById('chooseZip');
+    const loadZip = document.getElementById('loadZip');
+    const errorText = document.getElementById('errorText');
+
+    const loadBtn = document.getElementById('loadBtn');
+
+    const win = document.getElementById('win');
+    const winScore = document.getElementById('winScore');
+    const winAcc = document.getElementById('winAcc');
+    const winStreak = document.getElementById('winStreak');
+    const winHits = document.getElementById('winHits');
+    const playAgain = document.getElementById('playAgain');
+    const chooseFiles = document.getElementById('chooseFiles');
+
+    playAgain.onclick = ()=>{ win.style.display='none'; game.restart(); };
+    chooseFiles.onclick = ()=>{ win.style.display='none'; overlay.style.display='grid'; };
+
+    loadBtn.onclick = ()=>{ overlay.style.display='grid'; };
+
+    function setErr(msg){
+      if(!msg){ errorText.style.display='none'; errorText.textContent=''; return; }
+      errorText.style.display='block';
+      errorText.textContent = msg;
+    }
+
+    let __diffsCache = [];
+
+    function setDiffUIEnabled(on){
+      diffSelect.disabled = !on;
+      if(!on) diffSelect.innerHTML = '<option value="">(choose a zip first)</option>';
+      diffMeta.textContent='';
+    }
+
+    function populateDifficultySelect(diffs){
+      diffSelect.innerHTML = '';
+      for(const d of diffs){
+        const opt = document.createElement('option');
+        opt.value = d.name;
+        opt.textContent = `${d.name} (rank ${d.rank})`;
+        diffSelect.appendChild(opt);
+      }
+      const idx = Math.max(0, Math.min(diffs.length-1, Math.floor((diffs.length-1)/2)));
+      diffSelect.value = diffs[idx].name;
+      updateDiffMeta();
+    }
+
+    function updateDiffMeta(){
+      const name = diffSelect.value;
+      const d = __diffsCache.find(x => x.name === name);
+      if(!d){ diffMeta.textContent=''; return; }
+      const njsTxt = (d.njs && Number.isFinite(Number(d.njs))) ? ` · NJS ${Number(d.njs).toFixed(1)}` : '';
+      diffMeta.textContent = `${d.file}${njsTxt}`;
+    }
+
+    function updateReady(){
+      const f = zipFile.files && zipFile.files[0];
+      const okDiff = !!diffSelect.value;
+      loadZip.disabled = !(f && okDiff);
+    }
+
+    chooseZip.onclick = ()=> zipFile.click();
+
+    diffSelect.addEventListener('change', ()=>{ updateDiffMeta(); updateReady(); });
+
+    zipFile.addEventListener('change', async()=>{
+      const f = zipFile.files && zipFile.files[0];
+      zipMeta.textContent = f ? f.name : 'No file selected';
+      setErr('');
+      __diffsCache = [];
+      setDiffUIEnabled(false);
+
+      if(!f){ updateReady(); return; }
+
+      try{
+        const buf = await f.arrayBuffer();
+        const zip = await JSZip.loadAsync(buf);
+        const infoFile = findFileCaseInsensitive(zip, ['Info.dat','info.dat']);
+        if(!infoFile) throw new Error('ZIP is missing Info.dat');
+        const info = JSON.parse(await infoFile.async('string'));
+        const diffs = pickStandardDifficulties(info);
+        if(!diffs.length) throw new Error('No Standard difficulties in this map.');
+
+        __diffsCache = diffs;
+        setDiffUIEnabled(true);
+        populateDifficultySelect(diffs);
+      }catch(err){
+        console.error(err);
+        setErr('Error: ' + ((err && err.message) || String(err)));
+      }finally{
+        updateReady();
+      }
+    });
+
+    loadZip.onclick = async()=>{
+      const f = zipFile.files && zipFile.files[0];
+      if(!f) return;
+      setErr('');
+      loadZip.disabled = true;
+      try{
+        const selected = diffSelect.value || null;
+        await loadFromZipFile(f, selected);
+      } catch(err){
+        console.error(err);
+        setErr('Error: ' + ((err && err.message) || String(err)));
+      } finally {
+        loadZip.disabled = false;
+      }
+    };
+
+    // =========================
+    // Tests
+    // =========================
+    test('coverName safe split', ()=>{
+      const coverName='';
+      const base = coverName.split('/').pop() || '';
+      assert(base === '', 'base should be empty');
+    });
+
+    test('parseBeatmapTo4Lane collects v2 bombs', ()=>{
+      const beatmap={ _notes:[
+        {_time:1,_lineIndex:0,_type:0},
+        {_time:2,_lineIndex:1,_type:3},
+      ]};
+      const chart=parseBeatmapTo4Lane(beatmap, 120, 0);
+      assert(chart.notes.length===1, 'should have 1 note');
+      assert(chart.bombs.length===1, 'should have 1 bomb');
+      assert(chart.bombs[0].lane===1, 'bomb lane');
+    });
+
+    test('parseBeatmapTo4Lane collects v3 bombs', ()=>{
+      const beatmap={ colorNotes:[{b:1,x:0}], bombNotes:[{b:1,x:0},{b:2,x:3}] };
+      const chart=parseBeatmapTo4Lane(beatmap, 120, 0);
+      assert(chart.bombs.length===2, 'should have 2 bombs');
+      assert(chart.bombs[1].lane===3, 'bomb lane 3');
+    });
+
+    test('parseBeatmapTo4Lane collects v2 walls and skips duck', ()=>{
+      const beatmap={
+        _notes:[{_time:1,_lineIndex:0,_type:0}],
+        _obstacles:[
+          {_time:1,_lineIndex:0,_type:0,_duration:1,_width:2},
+          {_time:2,_lineIndex:0,_type:1,_duration:1,_width:1},
+        ]
+      };
+      const chart=parseBeatmapTo4Lane(beatmap, 120, 0);
+      assert(chart.walls.length===1, 'should have 1 wall');
+      assert(chart.walls[0].width===2, 'wall width');
+    });
+
+    test('parseBeatmapTo4Lane collects v3 walls and skips duck (y=2)', ()=>{
+      const beatmap={
+        colorNotes:[{b:1,x:0}],
+        obstacles:[
+          {b:1,x:1,y:0,d:1,w:1,h:5},
+          {b:2,x:2,y:2,d:1,w:1,h:3},
+        ]
+      };
+      const chart=parseBeatmapTo4Lane(beatmap, 120, 0);
+      assert(chart.walls.length===1, 'should have 1 wall');
+      assert(chart.walls[0].lane===1, 'wall lane');
+    });
+
+    test('wall chroma color is applied when present', ()=>{
+      const beatmap={
+        colorNotes:[{b:1,x:0}],
+        obstacles:[
+          {b:1,x:0,y:0,d:1,w:1,h:5, customData:{ color:[0,255,0,255] }},
+        ]
+      };
+      const chart=parseBeatmapTo4Lane(beatmap, 120, 0);
+      assert(chart.walls.length===1, 'should have 1 wall');
+      assert(String(chart.walls[0].color).toLowerCase()==='#00ff00', 'chroma wall color');
+    });
+
+    test('note overrides bomb on same lane/time bucket', ()=>{
+      const notes=[{lane:2,time:1.001,hit:false,missed:false}];
+      const bombs=[{lane:2,time:1.000}];
+      const occ = noteBucketsForLane(notes, 0, notes.length, 2);
+      assert(occ.has(timeBucket(1.000)), 'bucket occupied');
+      assert(occ.has(timeBucket(1.001)), 'bucket occupied');
+      assert(occ.has(timeBucket(bombs[0].time)), 'bomb bucket occupied');
+    });
+
+    test('ambientState gives faint glow when no events', ()=>{
+      const a = ambientState(0.10);
+      assert(a.state==='PURPLE', 'ambient uses PURPLE base');
+      assert(a.intensity>0.05 && a.intensity<0.2, 'ambient intensity');
+    });
+
+    test('strictPersist: lights persist until explicit OFF', ()=>{
+      const origNow = AudioEngine.nowSong;
+      let now = 0;
+      AudioEngine.nowSong = ()=> now;
+
+      // Provide a minimal view stub that Game expects
+      const v = {
+        hitLineY: 0,
+        track: { x:0, laneW:100, gap:0 },
+        canvas: document.createElement('canvas'),
+        lanePads: [],
+      };
+      const r = { draw(){} };
+
+      const g = new Game(v, r, {bindInputs:false});
+      g.lightMode = 'strictPersist';
+      g.pulseDecayMs = 300;
+      g.resetFixtures();
+
+      now = 0;
+      g.applyLightEvent({kind:'light', fixture:'backWash', state:'RED', intensity:1, color:null, alpha:1});
+      g.updateLightShow(0.016);
+      assert(g.fixture.backWash.state==='RED', 'state set');
+      assert(g.fixture.backWash.intensity===1, 'intensity persists');
+
+      now = 5.0;
+      g.updateLightShow(0.016);
+      assert(g.fixture.backWash.intensity===1, 'still persists later');
+
+      g.applyLightEvent({kind:'light', fixture:'backWash', state:'OFF', intensity:0, color:null, alpha:1});
+      g.updateLightShow(0.016);
+      assert(g.fixture.backWash.state==='OFF', 'explicit OFF');
+      assert(g.fixture.backWash.intensity===0, 'off intensity');
+
+      AudioEngine.nowSong = origNow;
+    });
+
+    test('pulseDecay: ON without OFF decays to 0 after pulseDecayMs', ()=>{
+      const origNow = AudioEngine.nowSong;
+      let now = 0;
+      AudioEngine.nowSong = ()=> now;
+
+      const v = { hitLineY: 0, track:{x:0,laneW:100,gap:0}, canvas: document.createElement('canvas'), lanePads: [] };
+      const r = { draw(){} };
+      const g = new Game(v, r, {bindInputs:false});
+      g.lightMode = 'pulseDecay';
+      g.pulseDecayMs = 300;
+      g.resetFixtures();
+
+      now = 0;
+      g.applyLightEvent({kind:'light', fixture:'backWash', state:'RED', intensity:1, color:null, alpha:1});
+      g.updateLightShow(0.016);
+      assert(g.fixture.backWash.state==='RED', 'turned on');
+      assert(g.fixture.backWash.intensity > 0.9, 'initial intensity');
+
+      now = 0.15;
+      g.updateLightShow(0.016);
+      assert(g.fixture.backWash.state==='RED', 'still on mid-decay');
+      assert(g.fixture.backWash.intensity > 0.05, 'not yet zero');
+
+      now = 0.35;
+      g.updateLightShow(0.016);
+      assert(g.fixture.backWash.state==='OFF', 'auto-off after decay');
+      assert(g.fixture.backWash.intensity===0, 'intensity at 0');
+
+      AudioEngine.nowSong = origNow;
+    });
+
+    test('pulseDecay: ON followed by another ON resets decay timer', ()=>{
+      const origNow = AudioEngine.nowSong;
+      let now = 0;
+      AudioEngine.nowSong = ()=> now;
+
+      const v = { hitLineY: 0, track:{x:0,laneW:100,gap:0}, canvas: document.createElement('canvas'), lanePads: [] };
+      const r = { draw(){} };
+      const g = new Game(v, r, {bindInputs:false});
+      g.lightMode = 'pulseDecay';
+      g.pulseDecayMs = 300;
+      g.resetFixtures();
+
+      now = 0;
+      g.applyLightEvent({kind:'light', fixture:'backWash', state:'RED', intensity:1, color:null, alpha:1});
+
+      now = 0.2;
+      g.updateLightShow(0.016);
+      const mid = g.fixture.backWash.intensity;
+      assert(mid < 1 && mid > 0, 'mid-decay intensity');
+
+      // Another ON should reset
+      g.applyLightEvent({kind:'light', fixture:'backWash', state:'RED', intensity:1, color:null, alpha:1});
+      g.updateLightShow(0.016);
+      assert(g.fixture.backWash.intensity > 0.9, 'reset to near full');
+
+      now = 0.45; // 250ms after reset
+      g.updateLightShow(0.016);
+      assert(g.fixture.backWash.state==='RED', 'still on before full decay');
+
+      now = 0.60; // 400ms after reset
+      g.updateLightShow(0.016);
+      assert(g.fixture.backWash.state==='OFF', 'off after decay from reset');
+      assert(g.fixture.backWash.intensity===0, '0 after decay');
+
+      AudioEngine.nowSong = origNow;
+    });
+
+    test('pulseDecay: explicit OFF wins immediately even mid-decay', ()=>{
+      const origNow = AudioEngine.nowSong;
+      let now = 0;
+      AudioEngine.nowSong = ()=> now;
+
+      const v = { hitLineY: 0, track:{x:0,laneW:100,gap:0}, canvas: document.createElement('canvas'), lanePads: [] };
+      const r = { draw(){} };
+      const g = new Game(v, r, {bindInputs:false});
+      g.lightMode = 'pulseDecay';
+      g.pulseDecayMs = 300;
+      g.resetFixtures();
+
+      now = 0;
+      g.applyLightEvent({kind:'light', fixture:'backWash', state:'RED', intensity:1, color:null, alpha:1});
+
+      now = 0.12;
+      g.updateLightShow(0.016);
+      assert(g.fixture.backWash.intensity > 0, 'still lit');
+
+      // Explicit OFF
+      g.applyLightEvent({kind:'light', fixture:'backWash', state:'OFF', intensity:0, color:null, alpha:1});
+      g.updateLightShow(0.016);
+      assert(g.fixture.backWash.state==='OFF', 'off immediately');
+      assert(g.fixture.backWash.intensity===0, 'intensity forced to 0');
+
+      now = 0.30;
+      g.updateLightShow(0.016);
+      assert(g.fixture.backWash.state==='OFF', 'stays off');
+      assert(g.fixture.backWash.intensity===0, 'stays 0');
+
+      AudioEngine.nowSong = origNow;
+    });
+
+    // Cleanup
+    window.addEventListener('beforeunload', ()=>{
+      if(__coverObjectUrl){
+        URL.revokeObjectURL(__coverObjectUrl);
+        __coverObjectUrl = null;
+      }
+      AudioEngine.stop();
+    });
+  </script>
+</body>
+</html>
