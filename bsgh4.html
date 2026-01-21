@@ -1900,10 +1900,11 @@
         };
 
         // Lighting behavior config
-        this.lightMode = LIGHTING_DEFAULTS.mode;
-        this.pulseDecayMs = LIGHTING_DEFAULTS.pulseDecayMs;
-        this.ambientWhenNoEvents = LIGHTING_DEFAULTS.ambientWhenNoEvents;
-        this.ambientWhenEvents = LIGHTING_DEFAULTS.ambientWhenEvents;
+        const lighting = (opts && opts.lighting) || {};
+        this.lightMode = lighting.mode || LIGHTING_DEFAULTS.mode;
+        this.pulseDecayMs = Number.isFinite(Number(lighting.pulseDecayMs)) ? Number(lighting.pulseDecayMs) : LIGHTING_DEFAULTS.pulseDecayMs;
+        this.ambientWhenNoEvents = Number.isFinite(Number(lighting.ambientWhenNoEvents)) ? Number(lighting.ambientWhenNoEvents) : LIGHTING_DEFAULTS.ambientWhenNoEvents;
+        this.ambientWhenEvents = Number.isFinite(Number(lighting.ambientWhenEvents)) ? Number(lighting.ambientWhenEvents) : LIGHTING_DEFAULTS.ambientWhenEvents;
 
         this._lightDecay = {
           backWash: { lastEventAt:-Infinity, startAt:-Infinity, from:0, target:0, duration:0 },
@@ -2010,6 +2011,7 @@
           if(!tgt) return;
 
           const now = AudioEngine.nowSong();
+          const eventTime = Number.isFinite(Number(ev.time)) ? Number(ev.time) : now;
           const state = ev.state || 'OFF';
           const alpha = Number.isFinite(Number(ev.alpha)) ? clamp01(ev.alpha) : 1;
           const nextIntensity = clamp01(ev.intensity) * alpha;
@@ -2019,11 +2021,11 @@
           tgt.intensity = (state === 'OFF') ? 0 : nextIntensity;
 
           const d = (this._lightDecay && this._lightDecay[ev.fixture]);
-          if(d){ d.lastEventAt = now; }
+          if(d){ d.lastEventAt = eventTime; }
 
           if(this.lightMode === 'pulseDecay' && state !== 'OFF' && nextIntensity > 0.0001){
             if(d){
-              d.startAt = now;
+              d.startAt = eventTime;
               d.from = nextIntensity;
               d.target = 0;
               d.duration = Math.max(1, Number(this.pulseDecayMs) || 300) / 1000;
