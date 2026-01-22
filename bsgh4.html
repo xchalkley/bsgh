@@ -2022,24 +2022,41 @@
           const state = ev.state || 'OFF';
           const alpha = Number.isFinite(Number(ev.alpha)) ? clamp01(ev.alpha) : 1;
           const nextIntensity = clamp01(ev.intensity) * alpha;
-
-          tgt.state = state;
-          tgt.color = ev.color || null;
-          tgt.intensity = (state === 'OFF') ? 0 : nextIntensity;
+          const isOff = state === 'OFF';
 
           const d = (this._lightDecay && this._lightDecay[ev.fixture]);
           if(d){ d.lastEventAt = eventTime; }
 
-          if(this.lightMode === 'pulseDecay' && state !== 'OFF' && nextIntensity > 0.0001){
+          if(isOff){
+            tgt.state = 'OFF';
+            tgt.intensity = 0;
+            tgt.color = null;
             if(d){
+              d.startAt = -Infinity;
+              d.from = 0;
+              d.target = 0;
+              d.duration = 0;
+            }
+            return;
+          }
+
+          tgt.state = state;
+          tgt.color = ev.color || null;
+          tgt.intensity = nextIntensity;
+
+          if(this.lightMode === 'pulseDecay'){
+            if(d && nextIntensity > 0.0001){
               d.startAt = eventTime;
               d.from = nextIntensity;
               d.target = 0;
               d.duration = Math.max(1, Number(this.pulseDecayMs) || 300) / 1000;
+            } else if(d){
+              d.startAt = -Infinity;
+              d.from = 0;
+              d.target = 0;
+              d.duration = 0;
             }
-          }
-
-          if(state === 'OFF' && d){
+          } else if(d){
             d.startAt = -Infinity;
             d.from = 0;
             d.target = 0;
@@ -2079,7 +2096,12 @@
               fx.intensity = 0;
               if('color' in fx) fx.color = null;
               const d0 = (this._lightDecay && this._lightDecay[key]);
-              if(d0) d0.startAt = -Infinity;
+              if(d0){
+                d0.startAt = -Infinity;
+                d0.from = 0;
+                d0.target = 0;
+                d0.duration = 0;
+              }
               continue;
             }
 
@@ -2800,6 +2822,7 @@
 
       now = 0;
       g.applyLightEvent({kind:'light', fixture:'backWash', state:'RED', intensity:1, color:null, alpha:1});
+      assert(g._lightDecay.backWash.startAt===0, 'decay starts at ON event');
       g.updateLightShow(0.016);
       assert(g.fixture.backWash.state==='RED', 'turned on');
       assert(g.fixture.backWash.intensity > 0.9, 'initial intensity');
@@ -2839,6 +2862,7 @@
 
       // Another ON should reset
       g.applyLightEvent({kind:'light', fixture:'backWash', state:'RED', intensity:1, color:null, alpha:1});
+      assert(g._lightDecay.backWash.startAt===0.2, 'decay timer reset');
       g.updateLightShow(0.016);
       assert(g.fixture.backWash.intensity > 0.9, 'reset to near full');
 
@@ -2875,6 +2899,7 @@
 
       // Explicit OFF
       g.applyLightEvent({kind:'light', fixture:'backWash', state:'OFF', intensity:0, color:null, alpha:1});
+      assert(g._lightDecay.backWash.startAt===-Infinity, 'decay canceled');
       g.updateLightShow(0.016);
       assert(g.fixture.backWash.state==='OFF', 'off immediately');
       assert(g.fixture.backWash.intensity===0, 'intensity forced to 0');
