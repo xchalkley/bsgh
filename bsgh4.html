@@ -381,6 +381,33 @@
       return i;
     };
 
+    function normalizeLightingMode(mode){
+      if(typeof mode !== 'string') return null;
+      const m = mode.trim().toLowerCase();
+      if(!m) return null;
+      if(['strictpersist','strict_persist','strict-persist','persist','persistent','hold','static'].includes(m)) return 'strictPersist';
+      if(['pulsedecay','pulse_decay','pulse-decay','pulse','decay','fade','fadedecay','fade-decay'].includes(m)) return 'pulseDecay';
+      return null;
+    }
+
+    function readLightModeFromBeatmap(beatmapJson){
+      if(!beatmapJson) return null;
+      const cd = (beatmapJson.customData || beatmapJson._customData) || null;
+      const candidates = [
+        beatmapJson.lightMode, beatmapJson._lightMode,
+        beatmapJson.lightBehavior, beatmapJson._lightBehavior,
+        beatmapJson.lightingMode, beatmapJson._lightingMode,
+        cd && (cd.lightMode || cd._lightMode),
+        cd && (cd.lightBehavior || cd._lightBehavior),
+        cd && (cd.lightingMode || cd._lightingMode),
+      ];
+      for(const c of candidates){
+        const normalized = normalizeLightingMode(c);
+        if(normalized) return normalized;
+      }
+      return null;
+    }
+
     // =========================
     // LIGHT SHOW PARSING (Beat Saber v2/v3)
     // =========================
@@ -498,6 +525,7 @@
       const bpmEvents = readBpmEvents(beatmapJson);
       const timeSigs = readTimeSignatureEvents(beatmapJson);
       const beatToSec = makeBeatToSec(bpm, bpmEvents);
+      const lightMode = readLightModeFromBeatmap(beatmapJson);
 
       let rawNotes = null;
       if(Array.isArray(beatmapJson.colorNotes)) rawNotes = beatmapJson.colorNotes;
@@ -671,7 +699,7 @@
 
       const lightEvents = parseLightshowEvents(beatmapJson, bpm, songTimeOffsetSec);
 
-      return { notes: out, bombs, walls, duration: durationEst, bpm, beatLines, bpmEvents, timeSigs, lightEvents };
+      return { notes: out, bombs, walls, duration: durationEst, bpm, beatLines, bpmEvents, timeSigs, lightEvents, lightMode };
     }
 
     // =========================
@@ -1908,7 +1936,8 @@
 
         // Lighting behavior config
         const lighting = (opts && opts.lighting) || {};
-        this.lightMode = lighting.mode || LIGHTING_DEFAULTS.mode;
+        this.baseLightMode = lighting.mode || LIGHTING_DEFAULTS.mode;
+        this.lightMode = this.baseLightMode;
         this.pulseDecayMs = Number.isFinite(Number(lighting.pulseDecayMs)) ? Number(lighting.pulseDecayMs) : LIGHTING_DEFAULTS.pulseDecayMs;
         this.ambientWhenNoEvents = Number.isFinite(Number(lighting.ambientWhenNoEvents)) ? Number(lighting.ambientWhenNoEvents) : LIGHTING_DEFAULTS.ambientWhenNoEvents;
         this.ambientWhenEvents = Number.isFinite(Number(lighting.ambientWhenEvents)) ? Number(lighting.ambientWhenEvents) : LIGHTING_DEFAULTS.ambientWhenEvents;
@@ -1982,6 +2011,7 @@
         this.fCount=0; this.pCount=0;
         this.ended=false; this.running=false; this.paused=false;
 
+        this.lightMode = chart.lightMode || this.baseLightMode || LIGHTING_DEFAULTS.mode;
         this.setLightEvents(chart.lightEvents || []);
 
         this.renderer.draw(this);
@@ -2022,24 +2052,41 @@
           const state = ev.state || 'OFF';
           const alpha = Number.isFinite(Number(ev.alpha)) ? clamp01(ev.alpha) : 1;
           const nextIntensity = clamp01(ev.intensity) * alpha;
-
-          tgt.state = state;
-          tgt.color = ev.color || null;
-          tgt.intensity = (state === 'OFF') ? 0 : nextIntensity;
+          const isOff = state === 'OFF';
 
           const d = (this._lightDecay && this._lightDecay[ev.fixture]);
           if(d){ d.lastEventAt = eventTime; }
 
-          if(this.lightMode === 'pulseDecay' && state !== 'OFF' && nextIntensity > 0.0001){
+          if(isOff){
+            tgt.state = 'OFF';
+            tgt.intensity = 0;
+            tgt.color = null;
             if(d){
+              d.startAt = -Infinity;
+              d.from = 0;
+              d.target = 0;
+              d.duration = 0;
+            }
+            return;
+          }
+
+          tgt.state = state;
+          tgt.color = ev.color || null;
+          tgt.intensity = nextIntensity;
+
+          if(this.lightMode === 'pulseDecay'){
+            if(d && nextIntensity > 0.0001){
               d.startAt = eventTime;
               d.from = nextIntensity;
               d.target = 0;
               d.duration = Math.max(1, Number(this.pulseDecayMs) || 300) / 1000;
+            } else if(d){
+              d.startAt = -Infinity;
+              d.from = 0;
+              d.target = 0;
+              d.duration = 0;
             }
-          }
-
-          if(state === 'OFF' && d){
+          } else if(d){
             d.startAt = -Infinity;
             d.from = 0;
             d.target = 0;
@@ -2079,7 +2126,12 @@
               fx.intensity = 0;
               if('color' in fx) fx.color = null;
               const d0 = (this._lightDecay && this._lightDecay[key]);
-              if(d0) d0.startAt = -Infinity;
+              if(d0){
+                d0.startAt = -Infinity;
+                d0.from = 0;
+                d0.target = 0;
+                d0.duration = 0;
+              }
               continue;
             }
 
@@ -2671,6 +2723,15 @@
       assert(chart.bombs[0].lane===1, 'bomb lane');
     });
 
+    test('parseBeatmapTo4Lane reads light mode from customData', ()=>{
+      const beatmap={
+        _notes:[{_time:1,_lineIndex:0,_type:0}],
+        _customData:{ lightMode:'strictPersist' },
+      };
+      const chart=parseBeatmapTo4Lane(beatmap, 120, 0);
+      assert(chart.lightMode==='strictPersist', 'light mode read');
+    });
+
     test('parseBeatmapTo4Lane keeps v2 lane 0 notes', ()=>{
       const beatmap={ _notes:[{_time:1,_lineIndex:0,_type:0}] };
       const chart=parseBeatmapTo4Lane(beatmap, 120, 0);
@@ -2800,6 +2861,7 @@
 
       now = 0;
       g.applyLightEvent({kind:'light', fixture:'backWash', state:'RED', intensity:1, color:null, alpha:1});
+      assert(g._lightDecay.backWash.startAt===0, 'decay starts at ON event');
       g.updateLightShow(0.016);
       assert(g.fixture.backWash.state==='RED', 'turned on');
       assert(g.fixture.backWash.intensity > 0.9, 'initial intensity');
@@ -2839,6 +2901,7 @@
 
       // Another ON should reset
       g.applyLightEvent({kind:'light', fixture:'backWash', state:'RED', intensity:1, color:null, alpha:1});
+      assert(g._lightDecay.backWash.startAt===0.2, 'decay timer reset');
       g.updateLightShow(0.016);
       assert(g.fixture.backWash.intensity > 0.9, 'reset to near full');
 
@@ -2875,6 +2938,7 @@
 
       // Explicit OFF
       g.applyLightEvent({kind:'light', fixture:'backWash', state:'OFF', intensity:0, color:null, alpha:1});
+      assert(g._lightDecay.backWash.startAt===-Infinity, 'decay canceled');
       g.updateLightShow(0.016);
       assert(g.fixture.backWash.state==='OFF', 'off immediately');
       assert(g.fixture.backWash.intensity===0, 'intensity forced to 0');
