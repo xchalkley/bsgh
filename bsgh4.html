@@ -381,6 +381,33 @@
       return i;
     };
 
+    function normalizeLightingMode(mode){
+      if(typeof mode !== 'string') return null;
+      const m = mode.trim().toLowerCase();
+      if(!m) return null;
+      if(['strictpersist','strict_persist','strict-persist','persist','persistent','hold','static'].includes(m)) return 'strictPersist';
+      if(['pulsedecay','pulse_decay','pulse-decay','pulse','decay','fade','fadedecay','fade-decay'].includes(m)) return 'pulseDecay';
+      return null;
+    }
+
+    function readLightModeFromBeatmap(beatmapJson){
+      if(!beatmapJson) return null;
+      const cd = (beatmapJson.customData || beatmapJson._customData) || null;
+      const candidates = [
+        beatmapJson.lightMode, beatmapJson._lightMode,
+        beatmapJson.lightBehavior, beatmapJson._lightBehavior,
+        beatmapJson.lightingMode, beatmapJson._lightingMode,
+        cd && (cd.lightMode || cd._lightMode),
+        cd && (cd.lightBehavior || cd._lightBehavior),
+        cd && (cd.lightingMode || cd._lightingMode),
+      ];
+      for(const c of candidates){
+        const normalized = normalizeLightingMode(c);
+        if(normalized) return normalized;
+      }
+      return null;
+    }
+
     // =========================
     // LIGHT SHOW PARSING (Beat Saber v2/v3)
     // =========================
@@ -498,6 +525,7 @@
       const bpmEvents = readBpmEvents(beatmapJson);
       const timeSigs = readTimeSignatureEvents(beatmapJson);
       const beatToSec = makeBeatToSec(bpm, bpmEvents);
+      const lightMode = readLightModeFromBeatmap(beatmapJson);
 
       let rawNotes = null;
       if(Array.isArray(beatmapJson.colorNotes)) rawNotes = beatmapJson.colorNotes;
@@ -671,7 +699,7 @@
 
       const lightEvents = parseLightshowEvents(beatmapJson, bpm, songTimeOffsetSec);
 
-      return { notes: out, bombs, walls, duration: durationEst, bpm, beatLines, bpmEvents, timeSigs, lightEvents };
+      return { notes: out, bombs, walls, duration: durationEst, bpm, beatLines, bpmEvents, timeSigs, lightEvents, lightMode };
     }
 
     // =========================
@@ -1908,7 +1936,8 @@
 
         // Lighting behavior config
         const lighting = (opts && opts.lighting) || {};
-        this.lightMode = lighting.mode || LIGHTING_DEFAULTS.mode;
+        this.baseLightMode = lighting.mode || LIGHTING_DEFAULTS.mode;
+        this.lightMode = this.baseLightMode;
         this.pulseDecayMs = Number.isFinite(Number(lighting.pulseDecayMs)) ? Number(lighting.pulseDecayMs) : LIGHTING_DEFAULTS.pulseDecayMs;
         this.ambientWhenNoEvents = Number.isFinite(Number(lighting.ambientWhenNoEvents)) ? Number(lighting.ambientWhenNoEvents) : LIGHTING_DEFAULTS.ambientWhenNoEvents;
         this.ambientWhenEvents = Number.isFinite(Number(lighting.ambientWhenEvents)) ? Number(lighting.ambientWhenEvents) : LIGHTING_DEFAULTS.ambientWhenEvents;
@@ -1982,6 +2011,7 @@
         this.fCount=0; this.pCount=0;
         this.ended=false; this.running=false; this.paused=false;
 
+        this.lightMode = chart.lightMode || this.baseLightMode || LIGHTING_DEFAULTS.mode;
         this.setLightEvents(chart.lightEvents || []);
 
         this.renderer.draw(this);
@@ -2691,6 +2721,15 @@
       assert(chart.notes.length===1, 'should have 1 note');
       assert(chart.bombs.length===1, 'should have 1 bomb');
       assert(chart.bombs[0].lane===1, 'bomb lane');
+    });
+
+    test('parseBeatmapTo4Lane reads light mode from customData', ()=>{
+      const beatmap={
+        _notes:[{_time:1,_lineIndex:0,_type:0}],
+        _customData:{ lightMode:'strictPersist' },
+      };
+      const chart=parseBeatmapTo4Lane(beatmap, 120, 0);
+      assert(chart.lightMode==='strictPersist', 'light mode read');
     });
 
     test('parseBeatmapTo4Lane keeps v2 lane 0 notes', ()=>{
